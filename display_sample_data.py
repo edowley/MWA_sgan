@@ -45,7 +45,7 @@ def plotting (subbands, subints, profile, dm_curve, title):
     
     fig.suptitle(title)    
     # plt.show()
-    chdir('/home/isaaccolleran/Documents/sgan/cand_pngs/')
+    # chdir('/home/isaaccolleran/Documents/sgan/cand_pngs/')
     plt.savefig(title +'.png')
 # end def
 
