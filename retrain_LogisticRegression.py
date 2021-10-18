@@ -24,7 +24,7 @@ def dir_path(string):
 '''
 parser = argparse.ArgumentParser(description='Re-train SGAN Machine Learning Model using User input PFD Files')
 parser.add_argument('-i', '--input_path', help='Absolute path of Input directory', default="/home/isaaccolleran/Documents/sgan/MWA_cands/")
-parser.add_argument('-o', '--output', help='Output path to save model',  default="/home/isaaccolleran/Documents/sgan/new_models/")
+parser.add_argument('-o', '--output', help='Output path to save model',  default="/home/isaaccolleran/Documents/sgan/MWA_best_retrained_models/")
 parser.add_argument('-l', '--labels', help='File with training data classification labels',  default="/home/isaaccolleran/Documents/sgan/MWA_cands/training_labels.csv")
 
 # parsing input arguments
@@ -77,10 +77,10 @@ time_phase_model = load_model('semi_supervised_trained_models/time_phase_best_di
 dm_curve_model = load_model('semi_supervised_trained_models/dm_curve_best_discriminator_model_labelled_%d_unlabelled_%d_trial_%d.h5'%(labelled_samples, unlabelled_samples,  attempt_no))
 pulse_profile_model = load_model('semi_supervised_trained_models/pulse_profile_best_discriminator_model_labelled_%d_unlabelled_%d_trial_%d.h5'%(labelled_samples, unlabelled_samples,  attempt_no))
 
-# freq_phase_model = load_model('best_retrained_models/freq_phase_best_discriminator_model.h5')
-# time_phase_model = load_model('best_retrained_models/time_phase_best_discriminator_model.h5')
-# dm_curve_model = load_model('best_retrained_models/dm_curve_best_discriminator_model.h5')
-# pulse_profile_model = load_model('best_retrained_models/pulse_profile_best_discriminator_model.h5')
+# freq_phase_model = load_model('MWA_best_retrained_models/from_scratch/attempt2/freq_phase_best_discriminator_model.h5')
+# time_phase_model = load_model('MWA_best_retrained_models/from_scratch/attempt2/time_phase_best_discriminator_model.h5')
+# dm_curve_model = load_model('MWA_best_retrained_models/from_scratch/attempt2/dm_curve_best_discriminator_model.h5')
+# pulse_profile_model = load_model('MWA_best_retrained_models/from_scratch/attempt2/pulse_profile_best_discriminator_model.h5')
 
 logistic_model = LogisticRegression()
 
@@ -90,39 +90,38 @@ predictions_time_phase = time_phase_model.predict([time_phase_data])
 predictions_dm_curve = dm_curve_model.predict([dm_curve_data])
 predictions_pulse_profile = pulse_profile_model.predict([pulse_profile_data])
 
-print('___________________________')
-print(predictions_time_phase.shape)
-predictions_freq_phase = predictions_freq_phase[:, 1]
-predictions_time_phase = predictions_time_phase[:, 1]
-predictions_dm_curve = predictions_dm_curve[:, 1]
-predictions_pulse_profile = predictions_pulse_profile[:, 1]
+# without argmax - just second value =================
+# predictions_freq_phase = predictions_freq_phase[:, 1]
+# predictions_time_phase = predictions_time_phase[:, 1]
+# predictions_dm_curve = predictions_dm_curve[:, 1]
+# predictions_pulse_profile = predictions_pulse_profile[:, 1]
 
-# print('________________________________________________________________________________________________')
-# print(predictions_dm_curve.shape)
 
-# predictions_time_phase = np.rint(predictions_time_phase)
-# predictions_time_phase = np.argmax(predictions_time_phase, axis=1)
-# predictions_time_phase = np.reshape(predictions_time_phase, len(predictions_time_phase))
+# with argmax ============================================
+predictions_time_phase = np.rint(predictions_time_phase)
+predictions_time_phase = np.argmax(predictions_time_phase, axis=1)
+predictions_time_phase = np.reshape(predictions_time_phase, len(predictions_time_phase))
 
-# predictions_dm_curve = np.rint(predictions_dm_curve)
-# predictions_dm_curve = np.argmax(predictions_dm_curve, axis=1)
-# predictions_dm_curve = np.reshape(predictions_dm_curve, len(predictions_dm_curve))
+predictions_dm_curve = np.rint(predictions_dm_curve)
+predictions_dm_curve = np.argmax(predictions_dm_curve, axis=1)
+predictions_dm_curve = np.reshape(predictions_dm_curve, len(predictions_dm_curve))
 
-# predictions_pulse_profile = np.rint(predictions_pulse_profile)
-# predictions_pulse_profile = np.argmax(predictions_pulse_profile, axis=1)
-# predictions_pulse_profile = np.reshape(predictions_pulse_profile, len(predictions_pulse_profile))
+predictions_pulse_profile = np.rint(predictions_pulse_profile)
+predictions_pulse_profile = np.argmax(predictions_pulse_profile, axis=1)
+predictions_pulse_profile = np.reshape(predictions_pulse_profile, len(predictions_pulse_profile))
 
-# predictions_freq_phase = np.rint(predictions_freq_phase)
-# predictions_freq_phase = np.argmax(predictions_freq_phase, axis=1)
-# predictions_freq_phase = np.reshape(predictions_freq_phase, len(predictions_freq_phase))
+predictions_freq_phase = np.rint(predictions_freq_phase)
+predictions_freq_phase = np.argmax(predictions_freq_phase, axis=1)
+predictions_freq_phase = np.reshape(predictions_freq_phase, len(predictions_freq_phase))
 
-stacked_results = np.stack((predictions_freq_phase, predictions_time_phase, predictions_dm_curve, predictions_pulse_profile), axis=1)
-stacked_results = np.reshape(stacked_results, (len(predictions_freq_phase), 4))
+# stacked_results = np.stack((predictions_freq_phase, predictions_time_phase, predictions_dm_curve, predictions_pulse_profile), axis=1)
+stacked_results = np.stack((predictions_freq_phase, predictions_dm_curve, predictions_time_phase), axis=1)
+stacked_results = np.reshape(stacked_results, (len(predictions_freq_phase), 3))
 
 # fitting the logistic regressor
 logistic_model.fit(stacked_results, training_labels)
 
 # saving the results
-pickle.dump(logistic_model, open('new_models/LogisticRegressor.pkl', 'wb'))
+pickle.dump(logistic_model, open(output_path+'sgan_retrained.pkl', 'wb'))
 
 

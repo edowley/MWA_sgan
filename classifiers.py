@@ -7,7 +7,6 @@ from sklearn.metrics import confusion_matrix, f1_score, precision_score, recall_
 from keras.layers.convolutional import UpSampling2D, Conv2D
 from keras import backend 
 from keras.optimizers import Adam
-import numpy as np
 import math, time
 import itertools
 from keras import backend as K
@@ -17,6 +16,7 @@ from keras.initializers import RandomNormal
 import glob, os, sys
 #import argparse, errno
 import pandas as pd
+from tensorflow.python.keras.engine import training
 class Train_SGAN_DM_Curve:
 
     """
@@ -212,16 +212,16 @@ class Train_SGAN_DM_Curve:
         if save_best_model == True:
             if acc > model_accuracy:
                 print('Current Model has %.3f training accuracy which is better than previous best of %.3f. Will save it as as new best model.' % (acc * 100, model_accuracy * 100 ))
-                filename2 = 'best_retrained_models/dm_curve_best_generator_model.h5'  
+                filename2 = 'MWA_best_retrained_models/dm_curve_best_generator_model.h5'  
                 g_model.save(filename2)
-                filename3 = 'best_retrained_models/dm_curve_best_discriminator_model.h5'
+                filename3 = 'MWA_best_retrained_models/dm_curve_best_discriminator_model.h5'
                 c_model.save(filename3)
                 model_accuracy = acc
 
             else:
-                print('Current Model is not as good as the best model. This model will not be saved.')
+                print('Current Model is not as good as the best model. This model will not be saved. Accuracy %.3f' % (acc * 100))
 
-            return model_accuracy
+            return model_accuracy, acc
         else:
             print('Classifier Accuracy: %.3f%%' % (acc * 100))
             # save the generator model
@@ -234,7 +234,7 @@ class Train_SGAN_DM_Curve:
             return model_accuracy
 
     ## train the generator and discriminator
-    def train(self, g_model, d_model, c_model, gan_model, latent_dim=100, n_epochs=10):
+    def train(self, g_model, d_model, c_model, gan_model, latent_dim=100, n_epochs=10, noisy_labels=True):
 
         ''' Define datasets. unlabelled_labels are all equal to -1. These labels are not used during training.'''
 
@@ -245,38 +245,71 @@ class Train_SGAN_DM_Curve:
         X_sup, y_sup = dataset
         epoch_number = 0
         model_accuracy = 0.
+        epoch_acc = 0.0
+
         # calculate the number of batches per training epoch
         bat_per_epo = int((dataset[0].shape[0] + unlabelled_dataset[0].shape[0]) / n_batch)
-
         print('batch per epoch is %d' % bat_per_epo)
+
+        accuracies = np.zeros((n_epochs))
+        training_accuracies = np.zeros((n_epochs))
+        epoch_accuracies = np.zeros((bat_per_epo))
+        
+
         # calculate the number of training iterations
         n_steps = bat_per_epo * n_epochs
+
         # calculate the size of half a batch of samples
         half_batch = int(n_batch / 2)
+
         print('n_epochs=%d, n_batch=%d, 1/2=%d, b/e=%d, steps=%d' % (n_epochs, n_batch, half_batch, bat_per_epo, n_steps))
         # manually enumerate epochs
         for i in range(n_steps):
             ''' update supervised discriminator (c) '''
-            [Xsup_real, ysup_real], _ = self.generate_real_samples([X_sup, y_sup], half_batch)
+            [Xsup_real, ysup_real], _ = self.generate_real_samples([X_sup, y_sup], half_batch, noisy_labels=noisy_labels)
             Xsup_real = np.reshape(Xsup_real, (half_batch,self.bin_size,1))
             c_loss, c_acc = c_model.train_on_batch(Xsup_real, ysup_real)
+            epoch_accuracies[i % bat_per_epo] = c_acc
+            epoch_acc += c_acc
+
             ''' update unsupervised discriminator (d) '''
-            [X_real, _], y_real = self.generate_real_samples(unlabelled_dataset, half_batch)
+            [X_real, _], y_real = self.generate_real_samples(unlabelled_dataset, half_batch, noisy_labels=noisy_labels)
             X_real = np.reshape(X_real, (half_batch,self.bin_size,1))
             d_loss1 = d_model.train_on_batch(X_real, y_real)
-            X_fake, y_fake = self.generate_fake_samples(g_model, latent_dim, half_batch)
+            X_fake, y_fake = self.generate_fake_samples(g_model, latent_dim, half_batch, noisy_labels=noisy_labels)
             
             d_loss2 = d_model.train_on_batch(X_fake, y_fake)
+
             # update generator (g)
             X_gan, y_gan = self.generate_latent_points(latent_dim, n_batch), np.ones((n_batch, 1))
             g_loss = gan_model.train_on_batch(X_gan, y_gan)
+
             #summarize loss on this batch
-            print('>%d, c[%.3f,%.0f], d[%.3f,%.3f], g[%.3f]' % (i+1, c_loss, c_acc*100, d_loss1, d_loss2, g_loss))
-            #print('>%d, c[%.3f,%.0f]' % (i+1, c_loss, c_acc*100))
+            # print('>%d, c[%.3f,%.0f], d[%.3f,%.3f], g[%.3f]' % (i+1, c_loss, c_acc*100, d_loss1, d_loss2, g_loss))
+            # print('>%d, c[%.3f,%.0f]' % (i+1, c_loss, c_acc*100))
+
             # evaluate the model performance every so often
             if (i+1) % (bat_per_epo * 1) == 0:
                 epoch_number+=1
-                model_accuracy = self.summarize_performance(i, g_model, c_model, latent_dim, dataset, validation_dataset, epoch_number, model_accuracy)
+                model_accuracy, this_acc = self.summarize_performance(i, g_model, c_model, latent_dim, dataset, validation_dataset, epoch_number, model_accuracy)
+                accuracies[epoch_number-1] = this_acc
+
+                # training accuracy
+                # training_accuracies[epoch_number-1] = np.mean(epoch_accuracies)
+                training_accuracies[epoch_number-1] = epoch_acc / bat_per_epo
+                # _, train_acc = c_model.evaluate(Xsup_real, ysup_real, verbose=0)
+                # training_accuracies[epoch_number-1] = train_acc
+                epoch_acc = 0.0
+        
+        plt.figure(1)
+        plt.plot(list(range(len(accuracies))), accuracies, list(range(len(training_accuracies))), training_accuracies)
+        plt.xlabel('Epoch no.')
+        plt.ylabel('Accuracy')
+        plt.title('Batch size = {}, num epochs = {}'.format(self.batch_size, n_epochs))
+        plt.legend(['validation', 'training'])
+        plt.ylim(0, 1)
+        plt.savefig('training_logs/dm_curve.png')
+        plt.close(1)
 
 
 
@@ -477,16 +510,16 @@ class Train_SGAN_Pulse_Profile:
         if save_best_model == True:
             if acc > model_accuracy:
                 print('Current Model has %.3f training accuracy which is better than previous best of %.3f. Will save it as as new best model.' % (acc * 100, model_accuracy * 100 ))
-                filename2 = 'best_retrained_models/pulse_profile_best_generator_model.h5'  
+                filename2 = 'MWA_best_retrained_models/pulse_profile_best_generator_model.h5'  
                 g_model.save(filename2)
-                filename3 = 'best_retrained_models/pulse_profile_best_discriminator_model.h5'
+                filename3 = 'MWA_best_retrained_models/pulse_profile_best_discriminator_model.h5'
                 c_model.save(filename3)
                 model_accuracy = acc
 
             else:
-                print('Current Model is not as good as the best model. This model will not be saved.')
+                print('Current Model is not as good as the best model. This model will not be saved. Accuracy %.3f' % (acc * 100))
 
-            return model_accuracy
+            return model_accuracy, acc
         else:
             print('Classifier Accuracy: %.3f%%' % (acc * 100))
             # save the generator model
@@ -496,10 +529,10 @@ class Train_SGAN_Pulse_Profile:
             filename3 = 'intermediate_models/pulse_profile_c_model_epoch_%d.h5' %int(epoch_number)
             c_model.save(filename3)
             print('>Saved: %s, and %s' % (filename2, filename3))
-            return model_accuracy
+            return model_accuracy, acc
 
     ## train the generator and discriminator
-    def train(self, g_model, d_model, c_model, gan_model, latent_dim=100, n_epochs=10):
+    def train(self, g_model, d_model, c_model, gan_model, latent_dim=100, n_epochs=10, noisy_labels=True):
 
         ''' Define datasets. unlabelled_labels are all equal to -1. These labels are not used during training.'''
 
@@ -510,38 +543,66 @@ class Train_SGAN_Pulse_Profile:
         X_sup, y_sup = dataset
         epoch_number = 0
         model_accuracy = 0.
+
         # calculate the number of batches per training epoch
         bat_per_epo = int((dataset[0].shape[0] + unlabelled_dataset[0].shape[0]) / n_batch)
-
         print('batch per epoch is %d' % bat_per_epo)
+
+        accuracies = np.zeros((n_epochs))
+        training_accuracies = np.zeros((n_epochs))
+        epoch_accuracies = np.zeros((bat_per_epo))
+
         # calculate the number of training iterations
         n_steps = bat_per_epo * n_epochs
+
         # calculate the size of half a batch of samples
         half_batch = int(n_batch / 2)
+
         print('n_epochs=%d, n_batch=%d, 1/2=%d, b/e=%d, steps=%d' % (n_epochs, n_batch, half_batch, bat_per_epo, n_steps))
         # manually enumerate epochs
         for i in range(n_steps):
             ''' update supervised discriminator (c) '''
-            [Xsup_real, ysup_real], _ = self.generate_real_samples([X_sup, y_sup], half_batch)
+            [Xsup_real, ysup_real], _ = self.generate_real_samples([X_sup, y_sup], half_batch, noisy_labels=noisy_labels)
             Xsup_real = np.reshape(Xsup_real, (half_batch,self.bin_size,1))
             c_loss, c_acc = c_model.train_on_batch(Xsup_real, ysup_real)
+            epoch_accuracies[i % bat_per_epo] = c_acc
+
             ''' update unsupervised discriminator (d) '''
-            [X_real, _], y_real = self.generate_real_samples(unlabelled_dataset, half_batch)
+            [X_real, _], y_real = self.generate_real_samples(unlabelled_dataset, half_batch, noisy_labels=noisy_labels)
             X_real = np.reshape(X_real, (half_batch,self.bin_size,1))
             d_loss1 = d_model.train_on_batch(X_real, y_real)
-            X_fake, y_fake = self.generate_fake_samples(g_model, latent_dim, half_batch)
+            X_fake, y_fake = self.generate_fake_samples(g_model, latent_dim, half_batch, noisy_labels=noisy_labels)
             
             d_loss2 = d_model.train_on_batch(X_fake, y_fake)
+
             # update generator (g)
             X_gan, y_gan = self.generate_latent_points(latent_dim, n_batch), np.ones((n_batch, 1))
             g_loss = gan_model.train_on_batch(X_gan, y_gan)
+
             #summarize loss on this batch
-            print('>%d, c[%.3f,%.0f], d[%.3f,%.3f], g[%.3f]' % (i+1, c_loss, c_acc*100, d_loss1, d_loss2, g_loss))
+            # print('>%d, c[%.3f,%.0f], d[%.3f,%.3f], g[%.3f]' % (i+1, c_loss, c_acc*100, d_loss1, d_loss2, g_loss))
             #print('>%d, c[%.3f,%.0f]' % (i+1, c_loss, c_acc*100))
+
             # evaluate the model performance every so often
             if (i+1) % (bat_per_epo * 1) == 0:
                 epoch_number+=1
-                model_accuracy = self.summarize_performance(i, g_model, c_model, latent_dim, dataset, validation_dataset, epoch_number, model_accuracy)
+                model_accuracy, this_acc = self.summarize_performance(i, g_model, c_model, latent_dim, dataset, validation_dataset, epoch_number, model_accuracy)
+                accuracies[epoch_number-1] = this_acc
+
+                # training accuracy
+                training_accuracies[epoch_number-1] = np.mean(epoch_accuracies)
+                # _, train_acc = c_model.evaluate(Xsup_real, ysup_real, verbose=0)
+                # training_accuracies[epoch_number-1] = train_acc
+        
+        plt.figure(1)
+        plt.plot(list(range(len(accuracies))), accuracies, list(range(len(training_accuracies))), training_accuracies)
+        plt.xlabel('Epoch no.')
+        plt.ylabel('Accuracy')
+        plt.title('Batch size = {}, num epochs = {}'.format(self.batch_size, n_epochs))
+        plt.legend(['validation', 'training'])
+        plt.ylim(0, 1)
+        plt.savefig('training_logs/pulse_profile.png')
+        plt.close(1)
 
 
 
@@ -746,16 +807,16 @@ class Train_SGAN_Freq_Phase:
         if save_best_model == True:
             if acc > model_accuracy:
                 print('Current Model has %.3f training accuracy which is better than previous best of %.3f. Will save it as as new best model.' % (acc * 100, model_accuracy * 100 ))
-                filename2 = 'best_retrained_models/freq_phase_best_generator_model.h5'  
+                filename2 = 'MWA_best_retrained_models/freq_phase_best_generator_model.h5'  
                 g_model.save(filename2)
-                filename3 = 'best_retrained_models/freq_phase_best_discriminator_model.h5'
+                filename3 = 'MWA_best_retrained_models/freq_phase_best_discriminator_model.h5'
                 c_model.save(filename3)
                 model_accuracy = acc
 
             else:
-                print('Current Model is not as good as the best model. This model will not be saved.')
+                print('Current Model is not as good as the best model. This model will not be saved. Accuracy %.3f'%(acc*100))
 
-            return model_accuracy
+            return model_accuracy, acc
         else:
             print('Classifier Accuracy: %.3f%%' % (acc * 100))
             # save the generator model
@@ -765,10 +826,10 @@ class Train_SGAN_Freq_Phase:
             filename3 = 'intermediate_models/freq_phase_c_model_epoch_%d.h5' %int(epoch_number)
             c_model.save(filename3)
             print('>Saved: %s, and %s' % (filename2, filename3))
-            return model_accuracy
+            return model_accuracy, acc
 
     ## train the generator and discriminator
-    def train(self, g_model, d_model, c_model, gan_model, latent_dim=100, n_epochs=10):
+    def train(self, g_model, d_model, c_model, gan_model, latent_dim=100, n_epochs=10, noisy_labels=True):
 
         ''' Define datasets. unlabelled_labels are all equal to -1. These labels are not used during training.'''
 
@@ -779,36 +840,66 @@ class Train_SGAN_Freq_Phase:
         X_sup, y_sup = dataset
         epoch_number = 0
         model_accuracy = 0.
+
         # calculate the number of batches per training epoch
         bat_per_epo = int((dataset[0].shape[0] + unlabelled_dataset[0].shape[0]) / n_batch)
-
         print('batch per epoch is %d' % bat_per_epo)
+
+        accuracies = np.zeros((n_epochs))
+        training_accuracies = np.zeros((n_epochs))
+        epoch_accuracies = np.zeros((bat_per_epo)) # training accuracy
+
         # calculate the number of training iterations
         n_steps = bat_per_epo * n_epochs
+
         # calculate the size of half a batch of samples
         half_batch = int(n_batch / 2)
+        
         print('n_epochs=%d, n_batch=%d, 1/2=%d, b/e=%d, steps=%d' % (n_epochs, n_batch, half_batch, bat_per_epo, n_steps))
         # manually enumerate epochs
         for i in range(n_steps):
             ''' update supervised discriminator (c) '''
-            [Xsup_real, ysup_real], _ = self.generate_real_samples([X_sup, y_sup], half_batch)
+            [Xsup_real, ysup_real], _ = self.generate_real_samples([X_sup, y_sup], half_batch, noisy_labels=noisy_labels)
             c_loss, c_acc = c_model.train_on_batch(Xsup_real, ysup_real)
+            epoch_accuracies[i % bat_per_epo] = c_acc
+
             ''' update unsupervised discriminator (d) '''
-            [X_real, _], y_real = self.generate_real_samples(unlabelled_dataset, half_batch)
+            [X_real, _], y_real = self.generate_real_samples(unlabelled_dataset, half_batch, noisy_labels=noisy_labels)
             d_loss1 = d_model.train_on_batch(X_real, y_real)
-            X_fake, y_fake = self.generate_fake_samples(g_model, latent_dim, half_batch)
+            X_fake, y_fake = self.generate_fake_samples(g_model, latent_dim, half_batch, noisy_labels=noisy_labels)
             
             d_loss2 = d_model.train_on_batch(X_fake, y_fake)
+
             ''' update generator (g) '''
             X_gan, y_gan = self.generate_latent_points(latent_dim, n_batch), np.ones((n_batch, 1))
             g_loss = gan_model.train_on_batch(X_gan, y_gan)
+
             #summarize loss on this batch
-            print('>%d, c[%.3f,%.0f], d[%.3f,%.3f], g[%.3f]' % (i+1, c_loss, c_acc*100, d_loss1, d_loss2, g_loss))
+            # print('>%d, c[%.3f,%.0f], d[%.3f,%.3f], g[%.3f]' % (i+1, c_loss, c_acc*100, d_loss1, d_loss2, g_loss))
             #print('>%d, c[%.3f,%.0f]' % (i+1, c_loss, c_acc*100))
+
             # evaluate the model performance every so often
             if (i+1) % (bat_per_epo * 1) == 0:
                 epoch_number+=1
-                model_accuracy = self.summarize_performance(i, g_model, c_model, latent_dim, dataset, validation_dataset, epoch_number, model_accuracy)
+                model_accuracy, this_acc = self.summarize_performance(i, g_model, c_model, latent_dim, dataset, validation_dataset, epoch_number, model_accuracy)
+                accuracies[epoch_number-1] = this_acc
+
+                # training accuracy
+                training_accuracies[epoch_number-1] = np.mean(epoch_accuracies)
+                # _, train_acc = c_model.evaluate(Xsup_real, ysup_real, verbose=0)
+                # training_accuracies[epoch_number-1] = train_acc
+            # end if
+        # end for
+        
+        plt.figure(1)
+        plt.plot(list(range(len(accuracies))), accuracies, list(range(len(training_accuracies))), training_accuracies)
+        plt.xlabel('Epoch no.')
+        plt.ylabel('Accuracy')
+        plt.title('Batch size = {}, num epochs = {}'.format(self.batch_size, n_epochs))
+        plt.legend(['validation', 'training'])
+        plt.ylim(0, 1)
+        plt.savefig('training_logs/freq_phase.png')
+        plt.close(1)
 
 class Train_SGAN_Time_Phase:
 
@@ -1009,16 +1100,16 @@ class Train_SGAN_Time_Phase:
         if save_best_model == True:
             if acc > model_accuracy:
                 print('Current Model has %.3f training accuracy which is better than previous best of %.3f. Will save it as as new best model.' % (acc * 100, model_accuracy * 100 ))
-                filename2 = 'best_retrained_models/time_phase_best_generator_model.h5'  
+                filename2 = 'MWA_best_retrained_models/time_phase_best_generator_model.h5'  
                 g_model.save(filename2)
-                filename3 = 'best_retrained_models/time_phase_best_discriminator_model.h5'
+                filename3 = 'MWA_best_retrained_models/time_phase_best_discriminator_model.h5'
                 c_model.save(filename3)
                 model_accuracy = acc
 
             else:
-                print('Current Model is not as good as the best model. This model will not be saved.')
+                print('Current Model is not as good as the best model. This model will not be saved. Accuracy %.3f' % (acc * 100))
 
-            return model_accuracy
+            return model_accuracy, acc
         else:
             print('Classifier Accuracy: %.3f%%' % (acc * 100))
             # save the generator model
@@ -1028,10 +1119,10 @@ class Train_SGAN_Time_Phase:
             filename3 = 'intermediate_models/time_phase_c_model_epoch_%d.h5' %int(epoch_number)
             c_model.save(filename3)
             print('>Saved: %s, and %s' % (filename2, filename3))
-            return model_accuracy
+            return model_accuracy, acc
 
     ## train the generator and discriminator
-    def train(self, g_model, d_model, c_model, gan_model, latent_dim=100, n_epochs=10):
+    def train(self, g_model, d_model, c_model, gan_model, latent_dim=100, n_epochs=10, noisy_labels=True):
 
         ''' Define datasets. unlabelled_labels are all equal to -1. These labels are not used during training.'''
 
@@ -1042,36 +1133,64 @@ class Train_SGAN_Time_Phase:
         X_sup, y_sup = dataset
         epoch_number = 0
         model_accuracy = 0.
+
         # calculate the number of batches per training epoch
         bat_per_epo = int((dataset[0].shape[0] + unlabelled_dataset[0].shape[0]) / n_batch)
-
         print('batch per epoch is %d' % bat_per_epo)
+
+        accuracies = np.zeros((n_epochs))
+        training_accuracies = np.zeros((n_epochs))
+        epoch_accuracies = np.zeros((bat_per_epo))
+
         # calculate the number of training iterations
         n_steps = bat_per_epo * n_epochs
+
         # calculate the size of half a batch of samples
         half_batch = int(n_batch / 2)
+
         print('n_epochs=%d, n_batch=%d, 1/2=%d, b/e=%d, steps=%d' % (n_epochs, n_batch, half_batch, bat_per_epo, n_steps))
         # manually enumerate epochs
         for i in range(n_steps):
             ''' update supervised discriminator (c) '''
-            [Xsup_real, ysup_real], _ = self.generate_real_samples([X_sup, y_sup], half_batch)
+            [Xsup_real, ysup_real], _ = self.generate_real_samples([X_sup, y_sup], half_batch, noisy_labels=noisy_labels)
             c_loss, c_acc = c_model.train_on_batch(Xsup_real, ysup_real)
+            epoch_accuracies[i % bat_per_epo] = c_acc
+
             ''' update unsupervised discriminator (d) '''
-            [X_real, _], y_real = self.generate_real_samples(unlabelled_dataset, half_batch)
+            [X_real, _], y_real = self.generate_real_samples(unlabelled_dataset, half_batch, noisy_labels=noisy_labels)
             d_loss1 = d_model.train_on_batch(X_real, y_real)
-            X_fake, y_fake = self.generate_fake_samples(g_model, latent_dim, half_batch)
+            X_fake, y_fake = self.generate_fake_samples(g_model, latent_dim, half_batch, noisy_labels=noisy_labels)
             
             d_loss2 = d_model.train_on_batch(X_fake, y_fake)
+
             ''' update generator (g) '''
             X_gan, y_gan = self.generate_latent_points(latent_dim, n_batch), np.ones((n_batch, 1))
             g_loss = gan_model.train_on_batch(X_gan, y_gan)
+
             #summarize loss on this batch
-            print('>%d, c[%.3f,%.0f], d[%.3f,%.3f], g[%.3f]' % (i+1, c_loss, c_acc*100, d_loss1, d_loss2, g_loss))
+            # print('>%d, c[%.3f,%.0f], d[%.3f,%.3f], g[%.3f]' % (i+1, c_loss, c_acc*100, d_loss1, d_loss2, g_loss))
             #print('>%d, c[%.3f,%.0f]' % (i+1, c_loss, c_acc*100))
+
             # evaluate the model performance every so often
             if (i+1) % (bat_per_epo * 1) == 0:
                 epoch_number+=1
-                model_accuracy = self.summarize_performance(i, g_model, c_model, latent_dim, dataset, validation_dataset, epoch_number, model_accuracy)
+                model_accuracy, this_acc = self.summarize_performance(i, g_model, c_model, latent_dim, dataset, validation_dataset, epoch_number, model_accuracy)
+                accuracies[epoch_number-1] = this_acc
+
+                # training accuracy
+                training_accuracies[epoch_number-1] = np.mean(epoch_accuracies)
+                # _, train_acc = c_model.evaluate(Xsup_real, ysup_real, verbose=0)
+                # training_accuracies[epoch_number-1] = train_acc
+        
+        plt.figure(1)
+        plt.plot(list(range(len(accuracies))), accuracies, list(range(len(training_accuracies))), training_accuracies)
+        plt.xlabel('Epoch no.')
+        plt.ylabel('Accuracy')
+        plt.title('Batch size = {}, num epochs = {}'.format(self.batch_size, n_epochs))
+        plt.legend(['validation', 'training'])
+        plt.ylim(0, 1)
+        plt.savefig('training_logs/time_phase.png')
+        plt.close(1)
 
 
 

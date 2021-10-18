@@ -17,7 +17,7 @@ def dir_path(string):
 
 parser = argparse.ArgumentParser(description='Score PFD or AR files based on SGAN Machine Learning Model')
 parser.add_argument('-i', '--input_path', help='Absolute path of Input directory', default="/home/isaaccolleran/Documents/sgan/MWA_validation/")
-parser.add_argument('-o', '--output', help='Output file name',  default="/home/isaaccolleran/Documents/sgan/MWA_cands/")
+parser.add_argument('-o', '--output', help='Output file name',  default="/home/isaaccolleran/Documents/sgan/")
 parser.add_argument('-b', '--batch_size', help='No. of pfd files that will be read in one batch', default='1', type=int)
 args = parser.parse_args()
 path_to_data = args.input_path
@@ -38,13 +38,19 @@ basename_candidate_files = [os.path.basename(filename) for filename in candidate
 labelled_samples = 50814
 unlabelled_samples = 265172
 attempt_no = 4
-freq_phase_model = load_model('semi_supervised_trained_models/freq_phase_best_discriminator_model_labelled_%d_unlabelled_%d_trial_%d.h5'%(labelled_samples, unlabelled_samples,  attempt_no))
-time_phase_model = load_model('semi_supervised_trained_models/time_phase_best_discriminator_model_labelled_%d_unlabelled_%d_trial_%d.h5'%(labelled_samples, unlabelled_samples,  attempt_no))
-dm_curve_model = load_model('semi_supervised_trained_models/dm_curve_best_discriminator_model_labelled_%d_unlabelled_%d_trial_%d.h5'%(labelled_samples, unlabelled_samples,  attempt_no))
-pulse_profile_model = load_model('semi_supervised_trained_models/pulse_profile_best_discriminator_model_labelled_%d_unlabelled_%d_trial_%d.h5'%(labelled_samples, unlabelled_samples,  attempt_no))
+# freq_phase_model = load_model('semi_supervised_trained_models/freq_phase_best_discriminator_model_labelled_%d_unlabelled_%d_trial_%d.h5'%(labelled_samples, unlabelled_samples,  attempt_no))
+# time_phase_model = load_model('semi_supervised_trained_models/time_phase_best_discriminator_model_labelled_%d_unlabelled_%d_trial_%d.h5'%(labelled_samples, unlabelled_samples,  attempt_no))
+# dm_curve_model = load_model('semi_supervised_trained_models/dm_curve_best_discriminator_model_labelled_%d_unlabelled_%d_trial_%d.h5'%(labelled_samples, unlabelled_samples,  attempt_no))
+# pulse_profile_model = load_model('semi_supervised_trained_models/pulse_profile_best_discriminator_model_labelled_%d_unlabelled_%d_trial_%d.h5'%(labelled_samples, unlabelled_samples,  attempt_no))
+
+dm_curve_model = load_model('MWA_best_retrained_models/from_scratch/dm_curve_best_discriminator_model.h5')
+freq_phase_model = load_model('MWA_best_retrained_models/from_scratch/freq_phase_best_discriminator_model.h5')
+pulse_profile_model = load_model('MWA_best_retrained_models/from_scratch/pulse_profile_best_discriminator_model.h5')
+time_phase_model = load_model('MWA_best_retrained_models/from_scratch/time_phase_best_discriminator_model.h5')
 
 # logistic_model = pickle.load(open('semi_supervised_trained_models/logistic_regression_labelled_%d_unlabelled_%d_trial_%d.pkl'%(labelled_samples, unlabelled_samples, attempt_no), 'rb'))
-logistic_model = pickle.load(open('new_models/LogisticRegressor.pkl', 'rb'))
+# logistic_model = pickle.load(open('new_models/LogisticRegressor.pkl', 'rb'))
+logistic_model = pickle.load(open('MWA_best_retrained_models/from_scratch/sgan_retrained.pkl', 'rb'))
 
 
 dm_curve_combined_array = [np.load(filename[:-4] + '_dm_curve.npy') for filename in candidate_files]
@@ -68,32 +74,32 @@ predictions_time_phase = time_phase_model.predict([time_phase_data])
 predictions_dm_curve = dm_curve_model.predict([dm_curve_data])
 predictions_pulse_profile = pulse_profile_model.predict([pulse_profile_data])
 
-predictions_freq_phase = predictions_freq_phase[:, 1]
-predictions_time_phase = predictions_time_phase[:, 1]
-predictions_dm_curve = predictions_dm_curve[:, 1]
-predictions_pulse_profile = predictions_pulse_profile[:, 1]
+# predictions_freq_phase = predictions_freq_phase[:, 1]
+# predictions_time_phase = predictions_time_phase[:, 1]
+# predictions_dm_curve = predictions_dm_curve[:, 1]
+# predictions_pulse_profile = predictions_pulse_profile[:, 1]
 
 # print(predictions_freq_phase)
 # print(predictions_time_phase)
 # print(predictions_dm_curve)
 # print(predictions_pulse_profile)
 
-# predictions_time_phase = np.rint(predictions_time_phase)
-# predictions_time_phase = np.argmax(predictions_time_phase, axis=1)
-# predictions_time_phase = np.reshape(predictions_time_phase, len(predictions_time_phase))
+predictions_time_phase = np.rint(predictions_time_phase)
+predictions_time_phase = np.argmax(predictions_time_phase, axis=1)
+predictions_time_phase = np.reshape(predictions_time_phase, len(predictions_time_phase))
 
-# predictions_dm_curve = np.rint(predictions_dm_curve)
-# predictions_dm_curve = np.argmax(predictions_dm_curve, axis=1)
-# predictions_dm_curve = np.reshape(predictions_dm_curve, len(predictions_dm_curve))
+predictions_dm_curve = np.rint(predictions_dm_curve)
+predictions_dm_curve = np.argmax(predictions_dm_curve, axis=1)
+predictions_dm_curve = np.reshape(predictions_dm_curve, len(predictions_dm_curve))
 
 
-# predictions_pulse_profile = np.rint(predictions_pulse_profile)
-# predictions_pulse_profile = np.argmax(predictions_pulse_profile, axis=1)
-# predictions_pulse_profile = np.reshape(predictions_pulse_profile, len(predictions_pulse_profile))
+predictions_pulse_profile = np.rint(predictions_pulse_profile)
+predictions_pulse_profile = np.argmax(predictions_pulse_profile, axis=1)
+predictions_pulse_profile = np.reshape(predictions_pulse_profile, len(predictions_pulse_profile))
 
-# predictions_freq_phase = np.rint(predictions_freq_phase)
-# predictions_freq_phase = np.argmax(predictions_freq_phase, axis=1)
-# predictions_freq_phase = np.reshape(predictions_freq_phase, len(predictions_freq_phase))
+predictions_freq_phase = np.rint(predictions_freq_phase)
+predictions_freq_phase = np.argmax(predictions_freq_phase, axis=1)
+predictions_freq_phase = np.reshape(predictions_freq_phase, len(predictions_freq_phase))
 
 
 stacked_predictions = np.stack((predictions_freq_phase, predictions_time_phase, predictions_dm_curve, predictions_pulse_profile), axis=1)

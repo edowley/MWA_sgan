@@ -42,13 +42,13 @@ def dir_path(string):
 -1 -> Unlabelled Candidate
 '''
 parser = argparse.ArgumentParser(description='Re-train SGAN Machine Learning Model using User input PFD Files')
-parser.add_argument('-i', '--input_path', help='Absolute path of Input directory', default="/fred/oz002/vishnu/sgan/sample_data/")
-parser.add_argument('-v', '--validation_path', help='Absolute path of validation data directory', default="/fred/oz002/vishnu/sgan/validation_data/")
-parser.add_argument('-u', '--unlabelled_path', help='Absolute path of unlabelled data directory', default="/fred/oz002/vishnu/sgan/unlabelled_data/")
-parser.add_argument('-o', '--output', help='Output path to save model',  default="/fred/oz002/vishnu/sgan/sample_data/")
-parser.add_argument('-l', '--labels', help='File with training data classification labels',  default="/fred/oz002/vishnu/sgan/sample_data/training_labels.csv")
-parser.add_argument('-w', '--validation_labels', help='File with validation classification labels',  default="/fred/oz002/vishnu/sgan/validation_data/validation_labels.csv")
-parser.add_argument('-b', '--batch_size', help='No. of pfd files that will be read in one batch', default='1', type=int)
+parser.add_argument('-i', '--input_path', help='Absolute path of Input directory', default='/home/isaaccolleran/Documents/sgan/MWA_cands/')
+parser.add_argument('-v', '--validation_path', help='Absolute path of validation data directory', default='/home/isaaccolleran/Documents/sgan/MWA_validation/')
+parser.add_argument('-u', '--unlabelled_path', help='Absolute path of unlabelled data directory', default='/home/isaaccolleran/Documents/sgan/MWA_unlabelled_cands/')
+parser.add_argument('-o', '--output', help='Output path to save model',  default='/home/isaaccolleran/Documents/sgan/new_models/')
+parser.add_argument('-l', '--labels', help='File with training data classification labels',  default="/home/isaaccolleran/Documents/sgan/MWA_cands/training_labels.csv")
+parser.add_argument('-w', '--validation_labels', help='File with validation classification labels',  default="/home/isaaccolleran/Documents/sgan/MWA_validation/validation_labels.csv")
+parser.add_argument('-b', '--batch_size', help='No. of pfd files that will be read in one batch', default='10', type=int)
 
 
 
@@ -64,15 +64,23 @@ dir_path(path_to_data)
 
 training_labels = pd.read_csv(training_labels_file)
 validation_labels = pd.read_csv(validation_labels_file)
+unlabelled_labels = pd.read_csv('/home/isaaccolleran/Documents/sgan/MWA_unlabelled_cands/training_labels.csv')
 
 
-for index, row in training_labels.iterrows():
-    if not os.path.isfile(path_to_data + row['Filename']):
-        raise FileNotFoundError(errno.ENOENT, os.strerror(errno.ENOENT), row['Filename'])
+# for index, row in training_labels.iterrows():
+#     if not os.path.isfile(path_to_data + row['Filename']):
+#         raise FileNotFoundError(errno.ENOENT, os.strerror(errno.ENOENT), row['Filename'])
 
-pfd_files = sorted(glob.glob(path_to_data + '*.pfd'))
-validation_files = sorted(glob.glob(validation_data_path + '*.pfd'))
-unlabelled_files = sorted(glob.glob(unlabelled_data_path + '*.pfd'))
+pfd_files = training_labels['Filename'].to_numpy()
+validation_files = validation_labels['Filename'].to_numpy()
+unlabelled_files = unlabelled_labels['Filename'].to_numpy()
+# pfd_files = sorted(glob.glob(path_to_data + '*.pfd'))
+# validation_files = sorted(glob.glob(validation_data_path + '*.pfd'))
+# unlabelled_files = sorted(glob.glob(unlabelled_data_path + '*.pfd'))
+
+pfd_files = [path_to_data+f for f in pfd_files]
+validation_files = [validation_data_path+f for f in validation_files]
+unlabelled_files = [unlabelled_data_path+f for f in unlabelled_files]
 
 
 #basename_pfd_files = [os.path.basename(filename) for filename in pfd_files]
@@ -152,42 +160,39 @@ pulse_profile_instance = Train_SGAN_Pulse_Profile(pulse_profile_data, training_l
 freq_phase_instance = Train_SGAN_Freq_Phase(freq_phase_data, training_labels, freq_phase_validation_data, validation_labels, freq_phase_unlabelled_data, unlabelled_lables, 2)
 time_phase_instance = Train_SGAN_Time_Phase(time_phase_data, training_labels, time_phase_validation_data, validation_labels, time_phase_unlabelled_data, unlabelled_lables, 2)
 
-
+n_epoch = 25
 
 #########
 d_model, c_model = dm_curve_instance.define_discriminator()
 g_model = dm_curve_instance.define_generator()
 gan_model = dm_curve_instance.define_gan(g_model, d_model)
-dm_curve_instance.train(g_model, d_model, c_model, gan_model)
+dm_curve_instance.train(g_model, d_model, c_model, gan_model, n_epochs=n_epoch)
 print('DM Curve Model Retraining has been completed')
+
+
 d_model, c_model = pulse_profile_instance.define_discriminator()
 g_model = pulse_profile_instance.define_generator()
 gan_model = pulse_profile_instance.define_gan(g_model, d_model)
-pulse_profile_instance.train(g_model, d_model, c_model, gan_model)
-
+pulse_profile_instance.train(g_model, d_model, c_model, gan_model, n_epochs=n_epoch)
 print('Pulse Profile Model Retraining has been completed')
-
-
 
 
 d_model, c_model = freq_phase_instance.define_discriminator()
 g_model = freq_phase_instance.define_generator()
 gan_model = freq_phase_instance.define_gan(g_model, d_model)
-freq_phase_instance.train(g_model, d_model, c_model, gan_model)
-
+freq_phase_instance.train(g_model, d_model, c_model, gan_model, n_epochs=n_epoch)
 print('Freq-Phase Model Retraining has been completed')
 
 d_model, c_model = time_phase_instance.define_discriminator()
 g_model = time_phase_instance.define_generator()
 gan_model = time_phase_instance.define_gan(g_model, d_model)
-time_phase_instance.train(g_model, d_model, c_model, gan_model)
-
+time_phase_instance.train(g_model, d_model, c_model, gan_model, n_epochs=n_epoch)
 print('Time-Phase Model Retraining has been completed')
 
-freq_phase_model = load_model('best_retrained_models/freq_phase_best_discriminator_model.h5')
-time_phase_model = load_model('best_retrained_models/time_phase_best_discriminator_model.h5')
-dm_curve_model = load_model('best_retrained_models/dm_curve_best_discriminator_model.h5')
-pulse_profile_model = load_model('best_retrained_models/pulse_profile_best_discriminator_model.h5')
+freq_phase_model = load_model('MWA_best_retrained_models/freq_phase_best_discriminator_model.h5')
+time_phase_model = load_model('MWA_best_retrained_models/time_phase_best_discriminator_model.h5')
+dm_curve_model = load_model('MWA_best_retrained_models/dm_curve_best_discriminator_model.h5')
+pulse_profile_model = load_model('MWA_best_retrained_models/pulse_profile_best_discriminator_model.h5')
 
 predictions_freq_phase = freq_phase_model.predict([freq_phase_data])
 predictions_time_phase = time_phase_model.predict([time_phase_data])
@@ -202,6 +207,8 @@ predictions_dm_curve = np.rint(predictions_dm_curve)
 predictions_dm_curve = np.argmax(predictions_dm_curve, axis=1)
 predictions_dm_curve = np.reshape(predictions_dm_curve, len(predictions_dm_curve))
 
+print(predictions_dm_curve)
+
 
 predictions_pulse_profile = np.rint(predictions_pulse_profile)
 predictions_pulse_profile = np.argmax(predictions_pulse_profile, axis=1)
@@ -215,8 +222,8 @@ model = LogisticRegression()
 stacked_results = np.stack((predictions_freq_phase, predictions_time_phase, predictions_dm_curve, predictions_pulse_profile), axis=1)
 stacked_results = np.reshape(stacked_results, (len(predictions_freq_phase), 4))
 model.fit(stacked_results, training_labels)
-pickle.dump(model, open('best_retrained_models/sgan_retrained.pkl', 'wb'))
+pickle.dump(model, open('MWA_best_retrained_models/sgan_retrained.pkl', 'wb'))
 
-#logistic_model = pickle.load(open('best_retrained_models/sgan_retrained.pkl', 'rb'))
-#logistic_model = pickle.load(open('semi_supervised_trained_models/logistic_regression_labelled_50814_unlabelled_265172_trial_4.pkl', 'rb'))
+# logistic_model = pickle.load(open('MWA_best_retrained_models/sgan_retrained.pkl', 'rb'))
+# logistic_model = pickle.load(open('semi_supervised_trained_models/logistic_regression_labelled_50814_unlabelled_265172_trial_4.pkl', 'rb'))
 
