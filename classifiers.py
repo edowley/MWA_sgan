@@ -245,7 +245,7 @@ class Train_SGAN_DM_Curve:
         X_sup, y_sup = dataset
         epoch_number = 0
         model_accuracy = 0.
-        epoch_acc = 0.0
+        # epoch_acc = 0.0
 
         # calculate the number of batches per training epoch
         bat_per_epo = int((dataset[0].shape[0] + unlabelled_dataset[0].shape[0]) / n_batch)
@@ -255,7 +255,6 @@ class Train_SGAN_DM_Curve:
         training_accuracies = np.zeros((n_epochs))
         epoch_accuracies = np.zeros((bat_per_epo))
         
-
         # calculate the number of training iterations
         n_steps = bat_per_epo * n_epochs
 
@@ -270,7 +269,7 @@ class Train_SGAN_DM_Curve:
             Xsup_real = np.reshape(Xsup_real, (half_batch,self.bin_size,1))
             c_loss, c_acc = c_model.train_on_batch(Xsup_real, ysup_real)
             epoch_accuracies[i % bat_per_epo] = c_acc
-            epoch_acc += c_acc
+            # epoch_acc += c_acc
 
             ''' update unsupervised discriminator (d) '''
             [X_real, _], y_real = self.generate_real_samples(unlabelled_dataset, half_batch, noisy_labels=noisy_labels)
@@ -295,11 +294,11 @@ class Train_SGAN_DM_Curve:
                 accuracies[epoch_number-1] = this_acc
 
                 # training accuracy
-                # training_accuracies[epoch_number-1] = np.mean(epoch_accuracies)
-                training_accuracies[epoch_number-1] = epoch_acc / bat_per_epo
+                training_accuracies[epoch_number-1] = np.mean(epoch_accuracies)
+                # training_accuracies[epoch_number-1] = epoch_acc / bat_per_epo
                 # _, train_acc = c_model.evaluate(Xsup_real, ysup_real, verbose=0)
                 # training_accuracies[epoch_number-1] = train_acc
-                epoch_acc = 0.0
+                # epoch_acc = 0.0
         
         plt.figure(1)
         plt.plot(list(range(len(accuracies))), accuracies, list(range(len(training_accuracies))), training_accuracies)
