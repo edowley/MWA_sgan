@@ -1,0 +1,99 @@
+Note: Label 0 are treated as NON-PULSAR candidates, Label 1 are treated as PULSAR candidates and Label -1 are treated as UNLABELLED candidates.
+Total Number of Candidates with label 1 is 217
+Total Number of Candidates with label 0 is 217
+batch per epoch is 251
+n_epochs=20, n_batch=16, 1/2=8, b/e=251, steps=5020
+Current Model has 78.333 training accuracy which is better than previous best of 0.000. Will save it as as new best model.
+Current Model has 83.333 training accuracy which is better than previous best of 78.333. Will save it as as new best model.
+Current Model is not as good as the best model. This model will not be saved. Accuracy 80.000
+Current Model is not as good as the best model. This model will not be saved. Accuracy 73.333
+Current Model is not as good as the best model. This model will not be saved. Accuracy 83.333
+Current Model is not as good as the best model. This model will not be saved. Accuracy 78.333
+Current Model is not as good as the best model. This model will not be saved. Accuracy 81.667
+Current Model is not as good as the best model. This model will not be saved. Accuracy 76.667
+Current Model is not as good as the best model. This model will not be saved. Accuracy 80.000
+Current Model is not as good as the best model. This model will not be saved. Accuracy 80.000
+Current Model is not as good as the best model. This model will not be saved. Accuracy 83.333
+Current Model is not as good as the best model. This model will not be saved. Accuracy 83.333
+Current Model is not as good as the best model. This model will not be saved. Accuracy 81.667
+Current Model is not as good as the best model. This model will not be saved. Accuracy 78.333
+Current Model is not as good as the best model. This model will not be saved. Accuracy 78.333
+Current Model is not as good as the best model. This model will not be saved. Accuracy 80.000
+Current Model is not as good as the best model. This model will not be saved. Accuracy 78.333
+Current Model is not as good as the best model. This model will not be saved. Accuracy 78.333
+Current Model is not as good as the best model. This model will not be saved. Accuracy 75.000
+Current Model is not as good as the best model. This model will not be saved. Accuracy 81.667
+DM Curve Model Retraining has been completed
+Time = 356.045 seconds
+batch per epoch is 251
+n_epochs=20, n_batch=16, 1/2=8, b/e=251, steps=5020
+Current Model has 80.000 training accuracy which is better than previous best of 0.000. Will save it as as new best model.
+Current Model is not as good as the best model. This model will not be saved. Accuracy 76.667
+Current Model has 83.333 training accuracy which is better than previous best of 80.000. Will save it as as new best model.
+Current Model is not as good as the best model. This model will not be saved. Accuracy 80.000
+Current Model is not as good as the best model. This model will not be saved. Accuracy 78.333
+Current Model is not as good as the best model. This model will not be saved. Accuracy 83.333
+Current Model is not as good as the best model. This model will not be saved. Accuracy 83.333
+Current Model is not as good as the best model. This model will not be saved. Accuracy 83.333
+Current Model is not as good as the best model. This model will not be saved. Accuracy 83.333
+Current Model is not as good as the best model. This model will not be saved. Accuracy 80.000
+Current Model is not as good as the best model. This model will not be saved. Accuracy 81.667
+Current Model is not as good as the best model. This model will not be saved. Accuracy 81.667
+Current Model is not as good as the best model. This model will not be saved. Accuracy 80.000
+Current Model is not as good as the best model. This model will not be saved. Accuracy 83.333
+Current Model is not as good as the best model. This model will not be saved. Accuracy 78.333
+Current Model is not as good as the best model. This model will not be saved. Accuracy 80.000
+Current Model is not as good as the best model. This model will not be saved. Accuracy 80.000
+Current Model is not as good as the best model. This model will not be saved. Accuracy 80.000
+Current Model is not as good as the best model. This model will not be saved. Accuracy 78.333
+Current Model is not as good as the best model. This model will not be saved. Accuracy 83.333
+Pulse Profile Model Retraining has been completed
+Time = 373.942 seconds
+batch per epoch is 251
+n_epochs=20, n_batch=16, 1/2=8, b/e=251, steps=5020
+Current Model has 58.333 training accuracy which is better than previous best of 0.000. Will save it as as new best model.
+Current Model has 66.667 training accuracy which is better than previous best of 58.333. Will save it as as new best model.
+Current Model has 76.667 training accuracy which is better than previous best of 66.667. Will save it as as new best model.
+Current Model has 80.000 training accuracy which is better than previous best of 76.667. Will save it as as new best model.
+Current Model is not as good as the best model. This model will not be saved. Accuracy 73.333
+Current Model is not as good as the best model. This model will not be saved. Accuracy 75.000
+Current Model is not as good as the best model. This model will not be saved. Accuracy 75.000
+Current Model is not as good as the best model. This model will not be saved. Accuracy 75.000
+Current Model is not as good as the best model. This model will not be saved. Accuracy 76.667
+Current Model is not as good as the best model. This model will not be saved. Accuracy 75.000
+Current Model is not as good as the best model. This model will not be saved. Accuracy 76.667
+Current Model is not as good as the best model. This model will not be saved. Accuracy 73.333
+Current Model is not as good as the best model. This model will not be saved. Accuracy 78.333
+Current Model is not as good as the best model. This model will not be saved. Accuracy 75.000
+Current Model is not as good as the best model. This model will not be saved. Accuracy 73.333
+Current Model is not as good as the best model. This model will not be saved. Accuracy 76.667
+Current Model is not as good as the best model. This model will not be saved. Accuracy 78.333
+Current Model is not as good as the best model. This model will not be saved. Accuracy 76.667
+Current Model is not as good as the best model. This model will not be saved. Accuracy 75.000
+Current Model is not as good as the best model. This model will not be saved. Accuracy 76.667
+Freq-Phase Model Retraining has been completed
+Time = 4881.981 seconds
+batch per epoch is 251
+n_epochs=20, n_batch=16, 1/2=8, b/e=251, steps=5020
+Current Model has 51.667 training accuracy which is better than previous best of 0.000. Will save it as as new best model.
+Current Model has 55.000 training accuracy which is better than previous best of 51.667. Will save it as as new best model.
+Current Model has 78.333 training accuracy which is better than previous best of 55.000. Will save it as as new best model.
+Current Model has 80.000 training accuracy which is better than previous best of 78.333. Will save it as as new best model.
+Current Model is not as good as the best model. This model will not be saved. Accuracy 76.667
+Current Model has 81.667 training accuracy which is better than previous best of 80.000. Will save it as as new best model.
+Current Model has 83.333 training accuracy which is better than previous best of 81.667. Will save it as as new best model.
+Current Model is not as good as the best model. This model will not be saved. Accuracy 81.667
+Current Model is not as good as the best model. This model will not be saved. Accuracy 81.667
+Current Model is not as good as the best model. This model will not be saved. Accuracy 80.000
+Current Model is not as good as the best model. This model will not be saved. Accuracy 76.667
+Current Model is not as good as the best model. This model will not be saved. Accuracy 80.000
+Current Model is not as good as the best model. This model will not be saved. Accuracy 76.667
+Current Model is not as good as the best model. This model will not be saved. Accuracy 80.000
+Current Model is not as good as the best model. This model will not be saved. Accuracy 73.333
+Current Model is not as good as the best model. This model will not be saved. Accuracy 76.667
+Current Model is not as good as the best model. This model will not be saved. Accuracy 71.667
+Current Model is not as good as the best model. This model will not be saved. Accuracy 78.333
+Current Model is not as good as the best model. This model will not be saved. Accuracy 78.333
+Current Model is not as good as the best model. This model will not be saved. Accuracy 78.333
+Time-Phase Model Retraining has been completed
+Time = 4990.120 seconds

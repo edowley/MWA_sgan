@@ -30,20 +30,20 @@ validation_dm_curve_data, validation_freq_phase_data, validation_pulse_profile_d
 from keras.models import load_model
 
 # Change this if wanting to load different discriminators
-dir_to_model = base_dir + 'MWA_best_retrained_models/from_scratch/attempt2/'
+dir_to_model = base_dir + 'MWA_best_retrained_models/attempt_20/'
 
-# dm_curve_model = load_model(dir_to_model + 'dm_curve_best_discriminator_model.h5')
-# time_phase_model = load_model(dir_to_model + 'time_phase_best_discriminator_model.h5')
-# freq_phase_model = load_model(dir_to_model + 'freq_phase_best_discriminator_model.h5')
-# pulse_profile_model = load_model(dir_to_model + 'pulse_profile_best_discriminator_model.h5')
-# logistic_model = pickle.load(open(dir_to_model + 'LogisticRegressor.pkl', 'rb'))
+dm_curve_model = load_model(dir_to_model + 'dm_curve_best_discriminator_model.h5')
+time_phase_model = load_model(dir_to_model + 'time_phase_best_discriminator_model.h5')
+freq_phase_model = load_model(dir_to_model + 'freq_phase_best_discriminator_model.h5')
+pulse_profile_model = load_model(dir_to_model + 'pulse_profile_best_discriminator_model.h5')
+logistic_model = pickle.load(open(dir_to_model + 'sgan_retrained.pkl', 'rb'))
 
-logistic_model = pickle.load(open(base_dir + 'MWA_best_retrained_models/sgan_retrained.pkl', 'rb'))
+# logistic_model = pickle.load(open(base_dir + 'MWA_best_retrained_models/sgan_retrained.pkl', 'rb'))
 
-dm_curve_model = load_model('semi_supervised_trained_models/dm_curve_best_discriminator_model_labelled_50814_unlabelled_265172_trial_4.h5')
-freq_phase_model = load_model('semi_supervised_trained_models/freq_phase_best_discriminator_model_labelled_50814_unlabelled_265172_trial_4.h5')
-pulse_profile_model = load_model('semi_supervised_trained_models/pulse_profile_best_discriminator_model_labelled_50814_unlabelled_265172_trial_4.h5')
-time_phase_model = load_model('semi_supervised_trained_models/time_phase_best_discriminator_model_labelled_50814_unlabelled_265172_trial_4.h5')
+# dm_curve_model = load_model('semi_supervised_trained_models/dm_curve_best_discriminator_model_labelled_50814_unlabelled_265172_trial_4.h5')
+# freq_phase_model = load_model('semi_supervised_trained_models/freq_phase_best_discriminator_model_labelled_50814_unlabelled_265172_trial_4.h5')
+# pulse_profile_model = load_model('semi_supervised_trained_models/pulse_profile_best_discriminator_model_labelled_50814_unlabelled_265172_trial_4.h5')
+# time_phase_model = load_model('semi_supervised_trained_models/time_phase_best_discriminator_model_labelled_50814_unlabelled_265172_trial_4.h5')
 # logistic_model = pickle.load(open('semi_supervised_trained_models/logistic_regression_labelled_50814_unlabelled_265172_trial_4.pkl', 'rb'))
 
 
@@ -69,9 +69,9 @@ predictions_freq_phase = np.rint(predictions_freq_phase)
 predictions_freq_phase = np.argmax(predictions_freq_phase, axis=1)
 predictions_freq_phase = np.reshape(predictions_freq_phase, len(predictions_freq_phase))
 
-# stacked_predictions = np.stack((predictions_freq_phase, predictions_time_phase, predictions_dm_curve, predictions_pulse_profile), axis=1)
-stacked_predictions = np.stack((predictions_freq_phase, predictions_dm_curve, predictions_time_phase), axis=1)
-# stacked_predictions = np.reshape(stacked_predictions, (len(predictions_pulse_profile),4))
+stacked_predictions = np.stack((predictions_freq_phase, predictions_time_phase, predictions_dm_curve, predictions_pulse_profile), axis=1)
+# stacked_predictions = np.stack((predictions_freq_phase, predictions_dm_curve, predictions_time_phase), axis=1)
+stacked_predictions = np.reshape(stacked_predictions, (len(predictions_pulse_profile),4))
 classified_results = logistic_model.predict(stacked_predictions) # if you want a classification score
 # classified_results = logistic_model.predict_proba(stacked_predictions)[:,1] # If you want a regression score
 

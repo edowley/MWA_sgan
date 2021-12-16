@@ -1,8 +1,6 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-
-
 import tensorflow as tf
 import matplotlib.pyplot as plt
 import numpy as np
@@ -25,6 +23,7 @@ from sklearn.linear_model import LogisticRegression
 import argparse, errno
 import pandas as pd
 from classifiers import Train_SGAN_DM_Curve, Train_SGAN_Pulse_Profile, Train_SGAN_Freq_Phase, Train_SGAN_Time_Phase
+from time import time
 class NotADirectoryError(Exception):
     pass
 
@@ -48,7 +47,7 @@ parser.add_argument('-u', '--unlabelled_path', help='Absolute path of unlabelled
 parser.add_argument('-o', '--output', help='Output path to save model',  default='/home/isaaccolleran/Documents/sgan/new_models/')
 parser.add_argument('-l', '--labels', help='File with training data classification labels',  default="/home/isaaccolleran/Documents/sgan/MWA_cands/training_labels.csv")
 parser.add_argument('-w', '--validation_labels', help='File with validation classification labels',  default="/home/isaaccolleran/Documents/sgan/MWA_validation/validation_labels.csv")
-parser.add_argument('-b', '--batch_size', help='No. of pfd files that will be read in one batch', default='10', type=int)
+parser.add_argument('-b', '--batch_size', help='No. of pfd files that will be read in one batch', default='16', type=int)
 
 
 
@@ -155,39 +154,53 @@ training_labels = training_labels['Classification'].to_numpy()
 validation_labels = validation_labels['Classification'].to_numpy()
 unlabelled_lables = np.tile(-1, int(dm_curve_unlabelled_data.shape[0]))
 
-dm_curve_instance = Train_SGAN_DM_Curve(dm_curve_data, training_labels, dm_curve_validation_data, validation_labels, dm_curve_unlabelled_data, unlabelled_lables, 2)
-pulse_profile_instance = Train_SGAN_Pulse_Profile(pulse_profile_data, training_labels, pulse_profile_validation_data, validation_labels, pulse_profile_unlabelled_data, unlabelled_lables, 2)
-freq_phase_instance = Train_SGAN_Freq_Phase(freq_phase_data, training_labels, freq_phase_validation_data, validation_labels, freq_phase_unlabelled_data, unlabelled_lables, 2)
-time_phase_instance = Train_SGAN_Time_Phase(time_phase_data, training_labels, time_phase_validation_data, validation_labels, time_phase_unlabelled_data, unlabelled_lables, 2)
+dm_curve_instance = Train_SGAN_DM_Curve(dm_curve_data, training_labels, dm_curve_validation_data, validation_labels, dm_curve_unlabelled_data, unlabelled_lables, batch_size)
+pulse_profile_instance = Train_SGAN_Pulse_Profile(pulse_profile_data, training_labels, pulse_profile_validation_data, validation_labels, pulse_profile_unlabelled_data, unlabelled_lables, batch_size)
+freq_phase_instance = Train_SGAN_Freq_Phase(freq_phase_data, training_labels, freq_phase_validation_data, validation_labels, freq_phase_unlabelled_data, unlabelled_lables, batch_size)
+time_phase_instance = Train_SGAN_Time_Phase(time_phase_data, training_labels, time_phase_validation_data, validation_labels, time_phase_unlabelled_data, unlabelled_lables, batch_size)
 
-n_epoch = 25
+n_epoch = 20
 
 #########
+start = time()
 d_model, c_model = dm_curve_instance.define_discriminator()
 g_model = dm_curve_instance.define_generator()
 gan_model = dm_curve_instance.define_gan(g_model, d_model)
 dm_curve_instance.train(g_model, d_model, c_model, gan_model, n_epochs=n_epoch)
+end = time()
 print('DM Curve Model Retraining has been completed')
+print('Time = %.3f seconds' % (end-start))
 
 
+start = time()
 d_model, c_model = pulse_profile_instance.define_discriminator()
 g_model = pulse_profile_instance.define_generator()
 gan_model = pulse_profile_instance.define_gan(g_model, d_model)
 pulse_profile_instance.train(g_model, d_model, c_model, gan_model, n_epochs=n_epoch)
+end = time()
 print('Pulse Profile Model Retraining has been completed')
+print('Time = %.3f seconds' % (end-start))
 
 
+start = time()
 d_model, c_model = freq_phase_instance.define_discriminator()
 g_model = freq_phase_instance.define_generator()
 gan_model = freq_phase_instance.define_gan(g_model, d_model)
 freq_phase_instance.train(g_model, d_model, c_model, gan_model, n_epochs=n_epoch)
+end = time()
 print('Freq-Phase Model Retraining has been completed')
+print('Time = %.3f seconds' % (end-start))
 
+
+start = time()
 d_model, c_model = time_phase_instance.define_discriminator()
 g_model = time_phase_instance.define_generator()
 gan_model = time_phase_instance.define_gan(g_model, d_model)
 time_phase_instance.train(g_model, d_model, c_model, gan_model, n_epochs=n_epoch)
+end = time()
 print('Time-Phase Model Retraining has been completed')
+print('Time = %.3f seconds' % (end-start))
+
 
 freq_phase_model = load_model('MWA_best_retrained_models/freq_phase_best_discriminator_model.h5')
 time_phase_model = load_model('MWA_best_retrained_models/time_phase_best_discriminator_model.h5')
@@ -207,7 +220,7 @@ predictions_dm_curve = np.rint(predictions_dm_curve)
 predictions_dm_curve = np.argmax(predictions_dm_curve, axis=1)
 predictions_dm_curve = np.reshape(predictions_dm_curve, len(predictions_dm_curve))
 
-print(predictions_dm_curve)
+# print(predictions_dm_curve)
 
 
 predictions_pulse_profile = np.rint(predictions_pulse_profile)

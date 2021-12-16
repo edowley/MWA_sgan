@@ -21,11 +21,6 @@
 #          respective labels (0 for non-pulsars, 1 for pulsars).
 #       4. Copy across the other class candidates and append their file
 #          names to the end of the list (including labels)
-#       5. Use np.argsort(array) to obtain the indexes of the candidates
-#          of the current array if they were to be arranged into alphabetical
-#          order. THIS IS NOT NEEDED BECAUSE WHEN SAVING LABELS YOU ALSO SHOULD 
-#          SAVE THE NAME OF THE CANDIDATE FILE
-#           - This is because we need to sort the class labels also
 #       6. Use array.sort() to sort the candidate list into alphabetical 
 #          order. Use the idices determined in the previous step to do the
 #          same for the labels array.
@@ -48,7 +43,7 @@ import argparse
 TO_SHUFFLE = True
 SAVE_ALL = False
 # MAX_PULSARS = 207
-MAX_PULSARS = 225
+MAX_PULSARS = 216
 N_FEATURES = 4
 TRAINING = 0
 VALIDATION = 1

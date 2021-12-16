@@ -28,7 +28,7 @@ dir_path(path_to_data)
 # this doesn't work in our case, instead get the candidate file names from candidate_labels.csv
 # candidate_files = sorted(glob.glob(path_to_data + '*.pfd') + glob.glob(path_to_data + '*.ar2'))
 
-with open(path_to_data + "training_labels.csv") as f:
+with open(path_to_data + "validation_labels.csv") as f:
     candidate_files = [path_to_data + row.split(',')[0] for row in f]
 candidate_files = candidate_files[1:] # first entry is title 
 basename_candidate_files = [os.path.basename(filename) for filename in candidate_files]
@@ -43,14 +43,14 @@ attempt_no = 4
 # dm_curve_model = load_model('semi_supervised_trained_models/dm_curve_best_discriminator_model_labelled_%d_unlabelled_%d_trial_%d.h5'%(labelled_samples, unlabelled_samples,  attempt_no))
 # pulse_profile_model = load_model('semi_supervised_trained_models/pulse_profile_best_discriminator_model_labelled_%d_unlabelled_%d_trial_%d.h5'%(labelled_samples, unlabelled_samples,  attempt_no))
 
-dm_curve_model = load_model('MWA_best_retrained_models/from_scratch/dm_curve_best_discriminator_model.h5')
-freq_phase_model = load_model('MWA_best_retrained_models/from_scratch/freq_phase_best_discriminator_model.h5')
-pulse_profile_model = load_model('MWA_best_retrained_models/from_scratch/pulse_profile_best_discriminator_model.h5')
-time_phase_model = load_model('MWA_best_retrained_models/from_scratch/time_phase_best_discriminator_model.h5')
+dm_curve_model = load_model('MWA_best_retrained_models/dm_curve_best_discriminator_model.h5')
+freq_phase_model = load_model('MWA_best_retrained_models/freq_phase_best_discriminator_model.h5')
+pulse_profile_model = load_model('MWA_best_retrained_models/pulse_profile_best_discriminator_model.h5')
+time_phase_model = load_model('MWA_best_retrained_models/time_phase_best_discriminator_model.h5')
 
 # logistic_model = pickle.load(open('semi_supervised_trained_models/logistic_regression_labelled_%d_unlabelled_%d_trial_%d.pkl'%(labelled_samples, unlabelled_samples, attempt_no), 'rb'))
 # logistic_model = pickle.load(open('new_models/LogisticRegressor.pkl', 'rb'))
-logistic_model = pickle.load(open('MWA_best_retrained_models/from_scratch/sgan_retrained.pkl', 'rb'))
+logistic_model = pickle.load(open('MWA_best_retrained_models/sgan_retrained.pkl', 'rb'))
 
 
 dm_curve_combined_array = [np.load(filename[:-4] + '_dm_curve.npy') for filename in candidate_files]
