@@ -59,10 +59,10 @@ def dir_path(string):
         raise NotADirectoryError("Directory path is not valid.")
 
 # parse arguments
-parser = argparse.ArgumentParser(description='Extract pfd or ar files as numpy array files.')
-parser.add_argument('-i', '--input_path', help='Path of candidates', default="/home/isaaccolleran/Desktop/candidates/")
-parser.add_argument('-o', '--output', help='Output directory location',  default="/home/isaaccolleran/Documents/sgan/MWA_cands/")
-parser.add_argument('-n', '--num_pulsars', help='Numer of pulsars (and also nonpulsars) to be read in', default=MAX_PULSARS, type=int)
+parser = argparse.ArgumentParser(description='Extract pfd files as numpy array files.')
+parser.add_argument('-i', '--input_path', help='Path of candidates', default="/home/ethandowley/SGAN_Test_Data/")
+parser.add_argument('-o', '--output', help='Output directory location',  default="/home/ethandowley/SGAN_Test_Data/MWA_cands/")
+parser.add_argument('-n', '--num_pulsars', help='Number of pulsars (and also nonpulsars) to be read in', default=MAX_PULSARS, type=int)
 parser.add_argument('-c', '--candidates', help='Type of candidate set to load. 0 for training set, 1 for validation set, -1 for unlabelled training set.', default=0, type=int)
 
 args = parser.parse_args()
@@ -123,7 +123,7 @@ def save_npy_from_pfd (directory, pfd_files, save_to_path):
 
 
 # getting all the candidate file names
-if dataset_type == VALIDATION: 
+if dataset_type == VALIDATION:
 # the validation set files are in a subdirectory of the training set files so we have to account for that
     pulsar_filenames = glob(path_to_data + 'grade_4/validation/*.pfd')
     RFI_filenames = glob(path_to_data + 'grade_0/validation/*.pfd')
@@ -204,7 +204,7 @@ if dataset_type == TRAINING: # training set
     save_npy_from_pfd(path_to_data+'grade_1/', noise_filenames, output_path)
 
 elif dataset_type == VALIDATION:
-    output_path = '/home/isaaccolleran/Documents/sgan/MWA_validation/'
+    output_path = '/home/ethandowley/SGAN_Test_Data/MWA_validation/'
     with open(output_path + 'validation_labels.csv', 'w') as f:
         f.write('Filename,Classification' + '\n') 
         for i in range(len(candidates)):
@@ -219,7 +219,7 @@ elif dataset_type == VALIDATION:
     save_npy_from_pfd(path_to_data+'grade_1/validation/', noise_filenames, output_path)
 
 elif dataset_type == UNLABELLED:
-    output_path = '/home/isaaccolleran/Documents/sgan/MWA_unlabelled_cands/'
+    output_path = '/home/ethandowley/SGAN_Test_Data/MWA_unlabelled_cands/'
     with open(output_path + 'training_labels.csv', 'w') as f:
         f.write('Filename,Classification' + '\n') 
         for i in range(len(candidates)):

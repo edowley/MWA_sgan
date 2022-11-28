@@ -15,9 +15,9 @@ def dir_path(string):
         raise NotADirectoryError("Directory path is not valid.")
 
 
-parser = argparse.ArgumentParser(description='Score PFD or AR files based on SGAN Machine Learning Model')
-parser.add_argument('-i', '--input_path', help='Absolute path of Input directory', default="/home/isaaccolleran/Documents/sgan/MWA_validation/")
-parser.add_argument('-o', '--output', help='Output file name',  default="/home/isaaccolleran/Documents/sgan/")
+parser = argparse.ArgumentParser(description='Score pfd files based on SGAN Machine Learning Model')
+parser.add_argument('-i', '--input_path', help='Absolute path of Input directory', default="/home/ethandowley/SGAN_Test_Data/MWA_validation/")
+parser.add_argument('-o', '--output', help='Output file name',  default="/home/ethandowley/SGAN_Test_Data/sgan/")
 parser.add_argument('-b', '--batch_size', help='No. of pfd files that will be read in one batch', default='1', type=int)
 args = parser.parse_args()
 path_to_data = args.input_path
