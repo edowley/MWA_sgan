@@ -1,7 +1,7 @@
 from .prepfold import pfd
 from .samples import downsample, normalize
 import numpy as np
-import presto.psr_utils
+import presto.psr_utils as psr_utils
 
 class pfddata(pfd):
     initialized = False
@@ -37,7 +37,7 @@ class pfddata(pfd):
             mx = self.profs.sum(0).sum(0).argmax()
             nbin = self.proflen
             #number of bins from 
-            noff = nbin/2 - mx
+            noff = round(nbin/2 - mx)
             self.profs = np.roll(self.profs, noff, axis=-1)
         if align:
             #ensure downsampled grid falls bin of max(profile)

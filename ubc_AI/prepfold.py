@@ -1,6 +1,9 @@
 import numpy as Num
 import copy, random, struct, sys
-import presto.psr_utils, presto.infodata, presto.polycos, presto.Pgplot
+import presto.psr_utils as psr_utils
+import presto.infodata as infodata
+import presto.polycos as polycos
+import presto.Pgplot as Pgplot
 from presto.bestprof import bestprof
 
 class pfd:
@@ -30,9 +33,9 @@ class pfd:
         self.pgdev = infile.read(struct.unpack(swapchar+"i", infile.read(4))[0])
         test = infile.read(16)
         if test[:8]!="Unknown":
-            self.rastr = test[:test.find('\0')]
+            self.rastr = test[:test.find(b'\0')]
             test = infile.read(16)
-            self.decstr = test[:test.find('\0')]
+            self.decstr = test[:test.find(b'\0')]
         else:
             self.rastr = "Unknown"
             self.decstr = "Unknown"
