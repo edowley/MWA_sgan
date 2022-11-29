@@ -25,14 +25,11 @@ batch_size = args.batch_size
 output_path = args.output
 dir_path(path_to_data)
 
-# this doesn't work in our case, instead get the candidate file names from candidate_labels.csv
-# candidate_files = sorted(glob.glob(path_to_data + '*.pfd') + glob.glob(path_to_data + '*.ar2'))
-
+# get the candidate file names from candidate_labels.csv
 with open(path_to_data + "validation_labels.csv") as f:
     candidate_files = [path_to_data + row.split(',')[0] for row in f]
 candidate_files = candidate_files[1:] # first entry is title 
 basename_candidate_files = [os.path.basename(filename) for filename in candidate_files]
-
 
 
 labelled_samples = 50814
@@ -114,6 +111,4 @@ with open('sgan_ai_score.csv', 'w') as f:
     f.write('Filename,SGAN_score' + '\n') 
     for i in range(len(candidate_files)):
         f.write(basename_candidate_files[i] + ',' + str(classified_results[i]) + '\n')
-
-
 
