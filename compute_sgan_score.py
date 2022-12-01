@@ -40,14 +40,14 @@ attempt_no = 4
 # dm_curve_model = load_model('semi_supervised_trained_models/dm_curve_best_discriminator_model_labelled_%d_unlabelled_%d_trial_%d.h5'%(labelled_samples, unlabelled_samples,  attempt_no))
 # pulse_profile_model = load_model('semi_supervised_trained_models/pulse_profile_best_discriminator_model_labelled_%d_unlabelled_%d_trial_%d.h5'%(labelled_samples, unlabelled_samples,  attempt_no))
 
-dm_curve_model = load_model('MWA_best_retrained_models/dm_curve_best_discriminator_model.h5')
-freq_phase_model = load_model('MWA_best_retrained_models/freq_phase_best_discriminator_model.h5')
-pulse_profile_model = load_model('MWA_best_retrained_models/pulse_profile_best_discriminator_model.h5')
-time_phase_model = load_model('MWA_best_retrained_models/time_phase_best_discriminator_model.h5')
+dm_curve_model = load_model('/home/ethandowley/MWA_sgan/MWA_best_retrained_models/attempt_20/dm_curve_best_discriminator_model.h5')
+freq_phase_model = load_model('/home/ethandowley/MWA_sgan/MWA_best_retrained_models/attempt_20/freq_phase_best_discriminator_model.h5')
+pulse_profile_model = load_model('/home/ethandowley/MWA_sgan/MWA_best_retrained_models/attempt_20/pulse_profile_best_discriminator_model.h5')
+time_phase_model = load_model('/home/ethandowley/MWA_sgan/MWA_best_retrained_models/attempt_20/time_phase_best_discriminator_model.h5')
 
 # logistic_model = pickle.load(open('semi_supervised_trained_models/logistic_regression_labelled_%d_unlabelled_%d_trial_%d.pkl'%(labelled_samples, unlabelled_samples, attempt_no), 'rb'))
 # logistic_model = pickle.load(open('new_models/LogisticRegressor.pkl', 'rb'))
-logistic_model = pickle.load(open('MWA_best_retrained_models/sgan_retrained.pkl', 'rb'))
+logistic_model = pickle.load(open('/home/ethandowley/MWA_sgan/MWA_best_retrained_models/attempt_20/sgan_retrained.pkl', 'rb'))
 
 
 dm_curve_combined_array = [np.load(filename[:-4] + '_dm_curve.npy') for filename in candidate_files]
