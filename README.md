@@ -26,3 +26,16 @@ As mentioned previously, I would recommend implementing the model found in the d
 2. Load up model
 3. (Optional) Extract feature plots from pfd files and save as npy files. This step is optional because saving the npy files is only important if you are planning on feeding the pfd file/s through the network more than once. It saves significant computation to load up 4 npy files instead of having to extract the data from the encoded pfd file each time funning. 
 4. Feed the data through the network and obtain prediction. This could be done by using compute_sgan_score.py and modifying the directory of the input data. 
+
+## Docker notes
+
+The [Dockerfile](Dockerfile) can be used to create a Docker image with
+```
+docker build
+```
+
+In order to have the GPUs on your system be visible from inside the container, you need to install [nvidia-container-runtime](https://nvidia.github.io/nvidia-container-runtime/) on your machine (i.e. not inside the container), as per the instructions [here](https://docs.docker.com/engine/reference/commandline/run/#access-an-nvidia-gpu).
+Then, to add GPUs to the container when running something, use the `--gpus` option, e.g.
+```
+docker run --gpus all [IMAGE] nvidia-smi
+```
