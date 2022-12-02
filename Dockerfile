@@ -49,7 +49,7 @@ RUN git clone https://github.com/scottransom/presto.git
 
 # Install presto python scripts
 ENV PRESTO /code/presto
-ENV LD_LIBRARY_PATH /code/presto/lib
+ENV LD_LIBRARY_PATH="${LD_LIBRARY_PATH}:${PRESTO}/lib"
 
 WORKDIR /code/presto/src
 # The following is necessary if your system isn't Ubuntu 20.04
