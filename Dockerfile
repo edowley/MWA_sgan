@@ -1,5 +1,7 @@
 FROM tensorflow/tensorflow:2.11.0-gpu
 
+LABEL MWA_sgan.version="1.0"
+
 # Install prerequisites
 ARG DEBIAN_FRONTEND=noninteractive
 RUN apt-get update -qq && \
@@ -18,6 +20,7 @@ RUN apt-get update -qq && \
     libpng-dev \
     libtool \
     libx11-dev \
+    nvidia-utils-515 \
     pgplot5 \
     python3-dev \
     python3-numpy \
@@ -32,9 +35,14 @@ ENV PGPLOT_DIR=/usr/local/pgplot
 ENV PGPLOT_DEV=/Xserve
 
 # Install python dependancies
-RUN pip3 install numpy \
-    scipy \
-    astropy
+RUN pip3 install argparse \
+    astropy \
+    matplotlib \
+    numpy \
+    pandas \
+    scikit-learn \
+    scipy
+
 
 # Obtain presto files
 WORKDIR /code
@@ -43,7 +51,6 @@ RUN git clone https://github.com/scottransom/presto.git
 # Install presto python scripts
 ENV PRESTO /code/presto
 ENV LD_LIBRARY_PATH /code/presto/lib
-ADD . /code/presto
 
 WORKDIR /code/presto/src
 # The following is necessary if your system isn't Ubuntu 20.04
@@ -86,5 +93,3 @@ RUN make makewisdom && \
     make -j 1 && \
     make clean
 ENV PATH="/code/presto/bin/:${PATH}"
-
-# Install MWA_sgan
