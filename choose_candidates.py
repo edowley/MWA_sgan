@@ -60,16 +60,27 @@ def dir_path(string):
 
 # parse arguments
 parser = argparse.ArgumentParser(description='Extract pfd files as numpy array files.')
-parser.add_argument('-i', '--input_path', help='Path of candidates', default="/home/ethandowley/SGAN_Test_Data/")
-parser.add_argument('-o', '--output', help='Output directory location',  default="/home/ethandowley/SGAN_Test_Data/MWA_cands/")
+parser.add_argument('-l', '--local', help='1 if running locally, 0 (default) if running in container', default=0, type=int)
+# parser.add_argument('-i', '--input_path', help='Path of candidates', default="/data/SGAN_Test_Data/")
+# parser.add_argument('-o', '--output', help='Output directory location',  default="/data/SGAN_Test_Data/MWA_cands/")
 parser.add_argument('-n', '--num_pulsars', help='Number of pulsars (and also nonpulsars) to be read in', default=MAX_PULSARS, type=int)
 parser.add_argument('-c', '--candidates', help='Type of candidate set to load. 0 for training set, 1 for validation set, -1 for unlabelled training set.', default=0, type=int)
 
 args = parser.parse_args()
-path_to_data = args.input_path
-output_path = args.output
+local = args.local
+# path_to_data = args.input_path
+# output_path = args.output
 num_pulsars = args.num_pulsars
 dataset_type = args.candidates
+
+if local == 1:
+    path_to_data = "/home/ethandowley/SGAN_Test_Data/"
+    output_path = "/home/ethandowley/SGAN_Test_Data/MWA_cands/"
+else:
+    path_to_data = "/data/SGAN_Test_Data/"
+    output_path = "/data/SGAN_Test_Data/MWA_cands/"
+
+dir_path(path_to_data)
 
 if num_pulsars > MAX_PULSARS:
     num_pulsars = MAX_PULSARS
@@ -204,7 +215,7 @@ if dataset_type == TRAINING: # training set
     save_npy_from_pfd(path_to_data+'grade_1/', noise_filenames, output_path)
 
 elif dataset_type == VALIDATION:
-    output_path = '/home/ethandowley/SGAN_Test_Data/MWA_validation/'
+    output_path = '/data/SGAN_Test_Data/MWA_validation/'
     with open(output_path + 'validation_labels.csv', 'w') as f:
         f.write('Filename,Classification' + '\n') 
         for i in range(len(candidates)):
@@ -219,7 +230,7 @@ elif dataset_type == VALIDATION:
     save_npy_from_pfd(path_to_data+'grade_1/validation/', noise_filenames, output_path)
 
 elif dataset_type == UNLABELLED:
-    output_path = '/home/ethandowley/SGAN_Test_Data/MWA_unlabelled_cands/'
+    output_path = '/data/SGAN_Test_Data/MWA_unlabelled_cands/'
     with open(output_path + 'training_labels.csv', 'w') as f:
         f.write('Filename,Classification' + '\n') 
         for i in range(len(candidates)):

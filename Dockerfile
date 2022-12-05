@@ -20,6 +20,7 @@ RUN apt-get update -qq && \
     libpng-dev \
     libtool \
     libx11-dev \
+    nano \
     pgplot5 \
     python3-dev \
     python3-numpy \
