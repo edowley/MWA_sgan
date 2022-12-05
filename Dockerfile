@@ -1,6 +1,6 @@
-FROM tensorflow/tensorflow:2.11.0-gpu
+FROM tensorflow/tensorflow:latest-gpu
 
-LABEL MWA_sgan.version="1.0"
+LABEL MWA_sgan.version="1.1"
 
 # Install prerequisites
 ARG DEBIAN_FRONTEND=noninteractive
@@ -20,7 +20,6 @@ RUN apt-get update -qq && \
     libpng-dev \
     libtool \
     libx11-dev \
-    nvidia-utils-515 \
     pgplot5 \
     python3-dev \
     python3-numpy \
@@ -50,7 +49,7 @@ RUN git clone https://github.com/scottransom/presto.git
 
 # Install presto python scripts
 ENV PRESTO /code/presto
-ENV LD_LIBRARY_PATH /code/presto/lib
+ENV LD_LIBRARY_PATH="${LD_LIBRARY_PATH}:${PRESTO}/lib"
 
 WORKDIR /code/presto/src
 # The following is necessary if your system isn't Ubuntu 20.04
