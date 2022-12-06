@@ -1,15 +1,8 @@
 ###############################################################################
 # 
-# This file contains the code that will extract candidates and put them into 
-# a file system that is supported by the code in extract_pfd_features.py.
+# This file contains code that will do stuff. WIP
 # 
-# This is assuming that the current candidates are in the grading system that
-# is used in the SMART survey (Swainston 2021, et. al). The important things 
-# to grasp from this grading system is:
-#       - Known pulsars are in a directory called grade_4
-#       - Noise candidates are in a directory called grade_1
-#       - RFI candidates are in a directory called grade_0
-# Once the candidates are in these folders, this script will:
+# This description will be updated eventually:
 #       1. Count the number of pulsars (I guess should also count non-pulsars
 #          just in case there are more non-pulsars than pulsars)
 #       2. Copy across the candidates from smallest class (pulsar, non-pulsar)
@@ -27,8 +20,6 @@
 #       7. Save the labels as 'validation_labels.csv' and candidates in a
 #          directory called MWA_cands or MWA_validation
 #
-# This process should be done for validation set also
-#
 ###############################################################################
 
 import numpy as np
@@ -38,12 +29,14 @@ from os.path import join, isdir, basename, isfile
 from random import shuffle
 from math import floor
 import argparse
+import pandas as pd
+from urllib.request import urlretrieve
 
 # constants / settings
 TO_SHUFFLE = True
 SAVE_ALL = False
-# MAX_PULSARS = 207
-MAX_PULSARS = 216
+MAX_PULSARS = 4096
+MAX_UNLABELLED = 32768
 N_FEATURES = 4
 TRAINING = 0
 VALIDATION = 1
@@ -60,30 +53,77 @@ def dir_path(string):
 
 # parse arguments
 parser = argparse.ArgumentParser(description='Extract pfd files as numpy array files.')
-parser.add_argument('-l', '--local', help='1 if running locally, 0 (default) if running in container', default=0, type=int)
-# parser.add_argument('-i', '--input_path', help='Path of candidates', default="/data/SGAN_Test_Data/")
-# parser.add_argument('-o', '--output', help='Output directory location',  default="/data/SGAN_Test_Data/")
-parser.add_argument('-n', '--num_pulsars', help='Number of pulsars (and also nonpulsars) to be read in', default=MAX_PULSARS, type=int)
-parser.add_argument('-c', '--candidates', help='Type of candidate set to load. 0 for training set, 1 for validation set, -1 for unlabelled training set.', default=0, type=int)
+parser.add_argument('-i', '--input_path', help='Path of candidates', default="/data/SGAN_Test_Data/")
+parser.add_argument('-o', '--output', help='Output directory location',  default="/data/SGAN_Test_Data/")
+parser.add_argument('-n', '--num_pulsars', help='Number of pulsars (and also non-pulsars) to be used', default=MAX_PULSARS, type=int)
+parser.add_argument('-u', '--num_unlabelled', help='Number of unlabelled candidates to be used', default=MAX_UNLABELLED, type=int)
 
 args = parser.parse_args()
-local = args.local
-# path_to_data = args.input_path
-# output_path = args.output
+path_to_data = args.input_path
+output_path = args.output
 num_pulsars = args.num_pulsars
-dataset_type = args.candidates
+num_unlabelled = args.num_unlabelled
 
-if local == 1:
-    path_to_data = "/home/ethandowley/SGAN_Test_Data/"
-    output_path = "/home/ethandowley/SGAN_Test_Data/"
-else:
-    path_to_data = "/data/SGAN_Test_Data/"
-    output_path = "/data/SGAN_Test_Data/"
+# THIS VARIABLE WILL BE DELETED SHORTLY
+dataset_type = 0
 
 dir_path(path_to_data)
 
 if num_pulsars > MAX_PULSARS:
     num_pulsars = MAX_PULSARS
+if num_unlabelled > MAX UNLABELLED:
+    num_unlabelled = MAX_UNLABELLED
+
+
+##################################################
+
+# Download database.csv from the SMART database and read it as a pandas dataframe
+# Contains candidate IDs, PFD URLs, notes, ratings, etc.
+df_path = input_path + 'database.csv'
+if not isfile(df_path):
+    urlretrieve('https://apps.datacentral.org.au/smart/candidates/?_export=csv', input_path + 'database.csv')
+df = pd.read_csv(input_path + 'database.csv')
+
+print(df)
+
+# Create masks for pulsars, noise, RFI and unlabelled candidates in the dataframe
+# Only considers pulsars with an ID above 20000 (so the PFD is available)
+# Would be nice if there was a boolean column for RFI, rather than relying on notes
+labelled_mask = (20000 <= df['ID'].to_numpy()) & ~np.isnan(df['Avg rating'].to_numpy())
+pulsar_mask = (df['Avg rating'].to_numpy() >= 4) & labelled_mask
+noise_mask = (df['Avg rating'].to_numpy() <= 2) & (np.char.find(df['Notes'].to_numpy(), 'RFI') == -1) & labelled_mask
+RFI_mask = (df['Avg rating'].to_numpy() <= 2) & (np.char.find(df['Notes'].to_numpy(), 'RFI') != -1) & labelled_mask
+unlabelled_mask = (20000 <= df['ID'].to_numpy()) & np.isnan(df['Avg rating'].to_numpy())
+
+total_num_pulsars = np.count_nonzero(pulsar_mask)
+total_num_noise = np.count_nonzero(noise_mask)
+total_num_RFI = np.count_nonzero(RFI_mask)
+total_num_unlabelled = np.count_nonzero(unlabelled_mask)
+
+# TO-DO:
+# Choose 70-80% of pulsars for the training set
+# Choose up to half that number of RFI, and fill the remaining with noise
+# Set aside all remaining pulsars, noise and RFI for the validation set
+# Also place all unlabelled candidates in the unlabelled training set
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+##################################################
+
+
+
 
 def save_npy_from_pfd (directory, pfd_files, save_to_path):
     # loading the data from the pfd file
@@ -113,26 +153,7 @@ def save_npy_from_pfd (directory, pfd_files, save_to_path):
         if (i == int(len(pfd_files) / 2)):
             print(' ... 50% done!')
 
-
-    ''' This way will only work when you have access large amounts of memory storage '''
-    # data = [pfddata(directory + f) for f in pfd_files]
-
-    # # extracting the appropriate plot data from the original data object
-    # time_phase_data = [file_data.getdata(intervals=48) for file_data in data]
-    # # print(len(time_phase_data[1]))
-    # freq_phase_data = [file_data.getdata(subbands=48) for file_data in data]
-    # dm_curve_data = [file_data.getdata(DMbins=60) for file_data in data]
-    # profile_data = [file_data.getdata(phasebins=64) for file_data in data]
-
-    # # saving each of the plot data to .npy files
-    # for i in range(len(pfd_files)):
-    #     np.save(output_path + pfd_files[i][:-4] + '_time_phase.npy', time_phase_data[i])
-    #     np.save(output_path + pfd_files[i][:-4] + '_freq_phase.npy', freq_phase_data[i])
-    #     np.save(output_path + pfd_files[i][:-4] + '_dm_curve.npy', dm_curve_data[i])
-    #     np.save(output_path + pfd_files[i][:-4] + '_pulse_profile.npy', profile_data[i])
-
-
-
+'''
 # getting all the candidate file names
 if dataset_type == VALIDATION:
 # the validation set files are in a subdirectory of the training set files so we have to account for that
@@ -238,7 +259,7 @@ elif dataset_type == UNLABELLED:
     print("Processing unlabelled pfd files")
     save_npy_from_pfd(path_to_data + 'unlabelled/', candidates, output_path)
 
-
+'''
 
 
 

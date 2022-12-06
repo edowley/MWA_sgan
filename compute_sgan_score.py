@@ -18,7 +18,7 @@ def dir_path(string):
 parser = argparse.ArgumentParser(description='Score pfd files based on SGAN Machine Learning Model')
 parser.add_argument('-l', '--local', help='1 if running locally, 0 (default) if running in container', default=0, type=int)
 # parser.add_argument('-i', '--input_path', help='Absolute path of Input directory', default="/data/SGAN_Test_Data/MWA_validation/")
-# parser.add_argument('-o', '--output', help='Output file name',  default="/data/SGAN_Test_Data/sgan/")
+# parser.add_argument('-o', '--output', help='Output file name',  default="/data/SGAN_Test_Data/")
 parser.add_argument('-b', '--batch_size', help='No. of pfd files that will be read in one batch', default=1, type=int)
 args = parser.parse_args()
 local = args.local
@@ -28,10 +28,10 @@ batch_size = args.batch_size
 
 if local == 1:
     path_to_data = "/home/ethandowley/SGAN_Test_Data/MWA_validation/"
-    output_path = "/home/ethandowley/SGAN_Test_Data/sgan/"
+    output_path = "/home/ethandowley/SGAN_Test_Data/"
 else:
     path_to_data = "/data/SGAN_Test_Data/MWA_validation/"
-    output_path = "/data/SGAN_Test_Data/sgan/"
+    output_path = "/data/SGAN_Test_Data/"
 
 dir_path(path_to_data)
 

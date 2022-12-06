@@ -93,3 +93,5 @@ RUN make makewisdom && \
     make -j 1 && \
     make clean
 ENV PATH="/code/presto/bin/:${PATH}"
+
+WORKDIR /MWA_sgan

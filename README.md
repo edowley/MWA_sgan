@@ -51,7 +51,7 @@ docker cp ~/SGAN_Test_Data dummy:/root
 docker rm dummy
 ```
 
-2. Use the following command (in this directory) to run the sgan:1.1 image with sgan_data attached:
+2. Use the following command (in this directory) to construct a container from the sgan:1.1 image with sgan_data attached:
 ```
 docker run --gpus all --name sgan_test -it -v $(pwd):/MWA_sgan -v sgan_data:/data -u $(id -u):$(id -g) sgan:1.1 bash
 ```

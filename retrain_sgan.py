@@ -41,12 +41,13 @@ def dir_path(string):
 -1 -> Unlabelled Candidate
 '''
 parser = argparse.ArgumentParser(description='Re-train SGAN Machine Learning Model using User input PFD Files')
-parser.add_argument('-i', '--input_path', help='Absolute path of Input directory', default='/home/isaaccolleran/Documents/sgan/MWA_cands/')
-parser.add_argument('-v', '--validation_path', help='Absolute path of validation data directory', default='/home/isaaccolleran/Documents/sgan/MWA_validation/')
-parser.add_argument('-u', '--unlabelled_path', help='Absolute path of unlabelled data directory', default='/home/isaaccolleran/Documents/sgan/MWA_unlabelled_cands/')
-parser.add_argument('-o', '--output', help='Output path to save model',  default='/home/isaaccolleran/Documents/sgan/new_models/')
-parser.add_argument('-l', '--labels', help='File with training data classification labels',  default="/home/isaaccolleran/Documents/sgan/MWA_cands/training_labels.csv")
-parser.add_argument('-w', '--validation_labels', help='File with validation classification labels',  default="/home/isaaccolleran/Documents/sgan/MWA_validation/validation_labels.csv")
+parser.add_argument('-i', '--input_path', help='Absolute path of Input directory', default='/data/SGAN_Test_Data/MWA_cands/')
+parser.add_argument('-v', '--validation_path', help='Absolute path of validation data directory', default='/data/SGAN_Test_Data/MWA_validation/')
+parser.add_argument('-u', '--unlabelled_path', help='Absolute path of unlabelled data directory', default='/data/SGAN_Test_Data/MWA_unlabelled_cands/')
+parser.add_argument('-o', '--output', help='Output path to save model',  default='/data/SGAN_Test_Data/new_models/')
+parser.add_argument('-l', '--labels', help='File with training data classification labels',  default="/data/SGAN_Test_Data/MWA_cands/training_labels.csv")
+parser.add_argument('-w', '--validation_labels', help='File with validation classification labels',  default="/data/SGAN_Test_Data/MWA_validation/validation_labels.csv")
+parser.add_argument('-x', '--unlabelled_labels', help='File with unlabelled training data classification labels',  default="/data/SGAN_Test_Data/MWA_unlabelled_cands/training_labels.csv")
 parser.add_argument('-b', '--batch_size', help='No. of pfd files that will be read in one batch', default='16', type=int)
 
 
@@ -59,11 +60,12 @@ batch_size = args.batch_size
 output_path = args.output
 training_labels_file = args.labels
 validation_labels_file = args.validation_labels
+unlabelled_labels_file = args.unlabelled_labels
 dir_path(path_to_data)
 
 training_labels = pd.read_csv(training_labels_file)
 validation_labels = pd.read_csv(validation_labels_file)
-unlabelled_labels = pd.read_csv('/home/isaaccolleran/Documents/sgan/MWA_unlabelled_cands/training_labels.csv')
+unlabelled_labels = pd.read_csv(unlabelled_labels_file)
 
 
 # for index, row in training_labels.iterrows():
@@ -221,7 +223,6 @@ predictions_dm_curve = np.argmax(predictions_dm_curve, axis=1)
 predictions_dm_curve = np.reshape(predictions_dm_curve, len(predictions_dm_curve))
 
 # print(predictions_dm_curve)
-
 
 predictions_pulse_profile = np.rint(predictions_pulse_profile)
 predictions_pulse_profile = np.argmax(predictions_pulse_profile, axis=1)
