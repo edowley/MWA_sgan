@@ -22,69 +22,70 @@
 #
 ###############################################################################
 
-import numpy as np
-from ubc_AI.training import pfddata
-from glob import glob
-from os.path import join, isdir, basename, isfile
-from random import shuffle
-from math import floor
 import argparse
+from glob import glob
+from math import floor
+import numpy as np
+import os
 import pandas as pd
+import sys.exit
+from time import sleep
+from ubc_AI.training import pfddata
 from urllib.request import urlretrieve
 
 # constants / settings
-TO_SHUFFLE = True
 SAVE_ALL = False
-MAX_PULSARS = 4096
-MAX_UNLABELLED = 32768
+DEFAULT_PULSARS = 4096
+DEFAULT_UNLABELLED = 32768
+VALIDATION_RATIO = 0.2
 N_FEATURES = 4
 TRAINING = 0
 VALIDATION = 1
 UNLABELLED = -1
 
-class NotADirectoryError(Exception):
-    pass
-
-def dir_path(string):
-    if isdir(string):
-        return string
-    else:
-        raise NotADirectoryError("Directory path is not valid.")
 
 # parse arguments
-parser = argparse.ArgumentParser(description='Extract pfd files as numpy array files.')
-parser.add_argument('-i', '--input_path', help='Path of candidates', default="/data/SGAN_Test_Data/")
-parser.add_argument('-o', '--output', help='Output directory location',  default="/data/SGAN_Test_Data/")
-parser.add_argument('-n', '--num_pulsars', help='Number of pulsars (and also non-pulsars) to be used', default=MAX_PULSARS, type=int)
-parser.add_argument('-u', '--num_unlabelled', help='Number of unlabelled candidates to be used', default=MAX_UNLABELLED, type=int)
+parser = argparse.ArgumentParser(description='Download pfd files, label, and extract as numpy array files.')
+parser.add_argument('-d', '--directory', help='Directory location to store data',  default="/data/SGAN_Test_Data/")
+parser.add_argument('-n', '--num_pulsars', help='Number of pulsars (and also non-pulsars) to be used', default=DEFAULT_PULSARS, type=int)
+parser.add_argument('-u', '--num_unlabelled', help='Number of unlabelled candidates to be used', default=DEFAULT_UNLABELLED, type=int)
 
 args = parser.parse_args()
-path_to_data = args.input_path
-output_path = args.output
+directory = args.directory # will contain 'database.csv', 'labelled/', 'validation/', and 'unlabelled/'
 num_pulsars = args.num_pulsars
 num_unlabelled = args.num_unlabelled
+  
 
-# THIS VARIABLE WILL BE DELETED SHORTLY
-dataset_type = 0
+# Check if there is already data in the directory
+if os.path.isdir(directory + 'validation/'):
+    with os.scandir(directory + 'validation/') as it:
+        if any(it):
+            print("There appears to already be some data in the target directory.")
+            sleep(2)
+            print("Please empty the 'labelled/', 'validation/' and 'unlabelled/' subdirectories before proceeding.")
+            sleep(3)
+            while True:
+                cont = input("Continue? (y/n) ")
+                if cont == 'y':
+                    break
+                elif cont == 'n':
+                    sys.exit() 
 
-dir_path(path_to_data)
 
-if num_pulsars > MAX_PULSARS:
-    num_pulsars = MAX_PULSARS
-if num_unlabelled > MAX UNLABELLED:
-    num_unlabelled = MAX_UNLABELLED
+# Make the directory, if it doesn't already exist
+os.makedirs(directory, exist_ok=True)
 
-
-##################################################
-
-# Download database.csv from the SMART database and read it as a pandas dataframe
+# Download database.csv, if it doesn't already exist, and read as a pandas dataframe
 # Contains candidate IDs, PFD URLs, notes, ratings, etc.
-df_path = input_path + 'database.csv'
-if not isfile(df_path):
-    urlretrieve('https://apps.datacentral.org.au/smart/candidates/?_export=csv', input_path + 'database.csv')
-df = pd.read_csv(input_path + 'database.csv')
+database_path = directory + 'database.csv'
+if not os.path.isfile(database_path):
+    urlretrieve('https://apps.datacentral.org.au/smart/candidates/?_export=csv', database_path)
+df = pd.read_csv(database_path)
+df = df.set_index('ID')
+
 
 print(df)
+
 
 # Create masks for pulsars, noise, RFI and unlabelled candidates in the dataframe
 # Only considers pulsars with an ID above 20000 (so the PFD is available)
@@ -95,42 +96,74 @@ noise_mask = (df['Avg rating'].to_numpy() <= 2) & (np.char.find(df['Notes'].to_n
 RFI_mask = (df['Avg rating'].to_numpy() <= 2) & (np.char.find(df['Notes'].to_numpy(), 'RFI') != -1) & labelled_mask
 unlabelled_mask = (20000 <= df['ID'].to_numpy()) & np.isnan(df['Avg rating'].to_numpy())
 
-total_num_pulsars = np.count_nonzero(pulsar_mask)
-total_num_noise = np.count_nonzero(noise_mask)
-total_num_RFI = np.count_nonzero(RFI_mask)
-total_num_unlabelled = np.count_nonzero(unlabelled_mask)
+# total_num_pulsars = np.count_nonzero(pulsar_mask)
+# total_num_noise = np.count_nonzero(noise_mask)
+# total_num_RFI = np.count_nonzero(RFI_mask)
+# total_num_unlabelled = np.count_nonzero(unlabelled_mask)
 
-# TO-DO:
-# Choose 70-80% of pulsars for the training set
-# Choose up to half that number of RFI, and fill the remaining with noise
-# Set aside all remaining pulsars, noise and RFI for the validation set
-# Also place all unlabelled candidates in the unlabelled training set
+# Dataframes separated by candidate type, containing the candidate ID and Pfd path
+all_pulsars = df[pulsar_mask][['ID', 'Pfd path']]
+all_noise = df[noise_mask][['ID', 'Pfd path']]
+all_RFI = df[RFI_mask][['ID', 'Pfd path']]
+all_unlabelled = df[unlablled_mask][['ID', 'Pfd path']]
+
+# Add the labels (1 for pulsar, 0 for non-pulsar)
+all_pulsars['Classification'] = 1
+all_noise['Classification'] = 0
+all_RFI['Classification'] = 0
+
+# The total number of each candidate type available
+total_num_pulsars = len(all_pulsars.index)
+total_num_noise = len(all_noise.index)
+total_num_RFI = len(all_RFI.index)
+total_num_unlabelled = len(all_unlabelled.index)
+
+# The number of each candidate type to use
+num_pulsars = min(num_pulsars, total_num_pulsars, 2*total_num_noise, 3*total_num_RFI)
+num_RFI = min(floor(num_pulsars/2), total_num_RFI)
+num_noise = num_pulsars - num_RFI
+num_unlabelled = min(num_unlabelled, total_num_unlabelled)
+
+# Randomly sample the required number of each candidate type
+# (This is actually an in-place operation)
+all_pulsars = all_pulsars.sample(n = num_pulsars, random_state = 1)
+all_noise = all_noise.sample(n = num_noise, random_state = 1)
+all_RFI = all_RFI.sample(n = num_RFI, random_state = 1)
+all_unlabelled = all_unlabelled.sample(n = num_unlabelled, random_state = 1)
 
 
+# Construct the labelled training and validation sets
+num_training_pulsars = floor(num_pulsars * (1 - VALIDATION_RATIO))
+num_training_noise = floor(num_RFI * (1 - VALIDATION_RATIO))
+num_training_RFI = floor(num_RFI * (1 - VALIDATION_RATIO))
+
+print("Number of training pulsar candidates: " + num_training_pulsars)
+print("Number of training noise candidates: " + num_training_noise)
+print("Number of training RFI candidates: " + num_training_RFI)
+print("Number of unlabelled training candidates: " + num_unlabelled)
+
+training_set = pandas.concat([all_pulsars.iloc[:num_training_pulsars], \
+                             all_noise.iloc[:num_training_noise], \
+                             all_RFI.iloc[:num_training_RFI]])
+validation_set = pandas.concat([all_pulsars.iloc[num_training_pulsars+1:], \
+                             all_noise.iloc[num_training_noise+1:], \
+                             all_RFI.iloc[num_training_RFI+1:]])
 
 
+# Write the list of chosen candidates for each set to csv files
+os.makedirs(directory + 'labelled/', exist_ok=True)
+os.makedirs(directory + 'validation/', exist_ok=True)
+os.makedirs(directory + 'unlabelled/', exist_ok=True)
+
+training_set.to_csv(directory + 'labelled/' + 'training_labels.csv')
+validation_set.to_csv(directory + 'validation/' + 'validation_labels.csv')
+all_unlabelled.to_csv(directory + 'unlabelled/' + 'unlabelled_labels.csv')
 
 
-
-
-
-
-
-
-
-
-
-##################################################
-
-
-
-
+# Extracts pfd files to numpy array files
 def save_npy_from_pfd (directory, pfd_files, save_to_path):
-    # loading the data from the pfd file
-
     ''' Processing a single candidate at a time '''
     for i, f in enumerate(pfd_files):
-        # print(i, f, len(glob(save_to_path+f[:-4]+'*')))
         if not len(glob(save_to_path + f[:-4] + '*')) == N_FEATURES:
             try:
                 data_obj = pfddata(directory + f)
@@ -145,129 +178,22 @@ def save_npy_from_pfd (directory, pfd_files, save_to_path):
                 np.save(save_to_path + f[:-4] + '_pulse_profile.npy', profile_data)
             except ValueError: 
                 print(f)
-        # else:
-            # print('{} skipped'.format(i))
-        # else it has already been processed, so don't resave
         
-
         if (i == int(len(pfd_files) / 2)):
             print(' ... 50% done!')
 
-'''
-# getting all the candidate file names
-if dataset_type == VALIDATION:
-# the validation set files are in a subdirectory of the training set files so we have to account for that
-    pulsar_filenames = glob(path_to_data + 'grade_4/validation/*.pfd')
-    RFI_filenames = glob(path_to_data + 'grade_0/validation/*.pfd')
-    noise_filenames = glob(path_to_data + 'grade_1/validation/*.pfd')
 
-elif dataset_type == TRAINING:
-    pulsar_filenames = glob(path_to_data + 'grade_4/*.pfd')
-    RFI_filenames = glob(path_to_data + 'grade_0/*.pfd')
-    noise_filenames = glob(path_to_data + 'grade_1/*.pfd')
-elif dataset_type == UNLABELLED:
-    pulsar_filenames = glob(path_to_data + 'unlabelled/*.pfd')
-    RFI_filenames = []
-    noise_filenames = []
-    print(noise_filenames)
-    
-pulsar_filenames = [basename(filename) for filename in pulsar_filenames]
-pulsar_filenames = sorted(pulsar_filenames)
-num_pulsars = len(pulsar_filenames)
+# Download the appropriate pfd files and convert them to numpy array files
 
-RFI_filenames = [basename(filename) for filename in RFI_filenames]
-RFI_filenames = sorted(RFI_filenames)
-num_RFI = len(RFI_filenames)
+for pfd_name in training_set['Pfd path'].values:
+    download_path = 'https://apps.datacentral.org.au/smart/media/candidates/' + pfd_name
+    save_path = directory + 'labelled/' + pfd_name
+    urlretrieve(download_path, save_path)
+# TO-DO: Figure out exactly what save_npy_from_pfd is doing and fix it
+    save_npy_from_pfd(directory + 'labelled/', pfd_name, directory + 'labelled/')
+    os.unlink(save_path)
 
-noise_filenames = [basename(filename) for filename in noise_filenames]
-noise_filenames = sorted(noise_filenames)
-num_noise = len(noise_filenames)
+# etc. for the validation and unlabelled sets (make sure unlabelled isn't weird)
 
-if TO_SHUFFLE:
-    shuffle(RFI_filenames)
-    shuffle(noise_filenames)
-    shuffle(pulsar_filenames)
-
-candidates = []
-if not SAVE_ALL:
-    candidates = pulsar_filenames[0:num_pulsars]
-
-    # handles the instance where the user supplies a -n (num_pulsars) value that is less
-    # than the MAX_PULSARS value.
-    if num_pulsars < MAX_PULSARS:
-        pulsar_filenames = pulsar_filenames[0:num_pulsars]
-
-    # This is here because there are a small number of RFI candidates (comparative to noise).
-    # Therefore, when the user supplies an n value small enough, we will have a 50/50 split
-    # for the nonpulsar candidates (noise / RFI). 
-    if not num_RFI < num_pulsars/2:
-        # include up to half of RFI candidates
-        RFI_filenames = RFI_filenames[0:(num_pulsars - floor(num_pulsars / 2))]
-        num_RFI = len(RFI_filenames)
-
-    num_noise = num_pulsars - num_RFI
-    noise_filenames = noise_filenames[0:num_noise]
-    num_noise = len(noise_filenames)
-
-
-print ("pulsars: {}, RFI: {}, noise: {}".format(num_pulsars, num_RFI, num_noise))
-candidates += RFI_filenames + noise_filenames
-
-# creating the labels 
-pulsar_labels = [1] * num_pulsars
-nonpulsar_labels = [0] * (num_noise + num_RFI)
-# (num_noise + num_RFI should be equal to num_pulsars)
-labels = pulsar_labels + nonpulsar_labels
-
-# saving the candidate name and the label to .csv file
-print("Saving training_labels.csv file")
-if dataset_type == TRAINING: # training set
-    with open(output_path + 'MWA_cands/' + 'training_labels.csv', 'w') as f:
-        f.write('Filename,Classification' + '\n') 
-        for i in range(len(candidates)):
-            f.write(candidates[i] + ',' + str(labels[i]) + '\n')
-
-    # processing candidate names into .npy files for each of the plots
-    print("Processing pulsar pfd files")
-    save_npy_from_pfd(path_to_data + 'grade_4/', pulsar_filenames, output_path)
-    print("Processing RFI pfd files")
-    save_npy_from_pfd(path_to_data + 'grade_0/', RFI_filenames, output_path)
-    print("Processing noise pfd files")
-    save_npy_from_pfd(path_to_data + 'grade_1/', noise_filenames, output_path)
-
-elif dataset_type == VALIDATION:
-    with open(output_path + 'MWA_validation/' + 'validation_labels.csv', 'w') as f:
-        f.write('Filename,Classification' + '\n') 
-        for i in range(len(candidates)):
-            f.write(candidates[i] + ',' + str(labels[i]) + '\n')
-
-    # processing candidate names into .npy files for each of the plots
-    print("Processing pulsar pfd files")
-    save_npy_from_pfd(path_to_data + 'grade_4/validation/', pulsar_filenames, output_path)
-    print("Processing RFI pfd files")
-    save_npy_from_pfd(path_to_data + 'grade_0/validation/', RFI_filenames, output_path)
-    print("Processing noise pfd files")
-    save_npy_from_pfd(path_to_data + 'grade_1/validation/', noise_filenames, output_path)
-
-elif dataset_type == UNLABELLED:
-    with open(output_path + 'MWA_unlabelled_cands/' + 'training_labels.csv', 'w') as f:
-        f.write('Filename,Classification' + '\n') 
-        for i in range(len(candidates)):
-            f.write(candidates[i] + ',-1\n')
-
-    # processing candidate names into .npy files for each of the plots
-    print("Processing unlabelled pfd files")
-    save_npy_from_pfd(path_to_data + 'unlabelled/', candidates, output_path)
-
-'''
-
-
-
-
-
-
-
-
-
-
+# Optional TO-DO: research how to make two operations run at once (download and convert)
 
