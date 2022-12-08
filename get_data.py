@@ -25,16 +25,17 @@
 import argparse
 from glob import glob
 from math import floor
+import multiprocessing as mp
 import numpy as np
 import os
 import pandas as pd
 import sys.exit
-from time import sleep
+from time import time, sleep
 from ubc_AI.training import pfddata
 from urllib.request import urlretrieve
 
 # constants / settings
-SAVE_ALL = False
+NUM_CPUS = mp.cpu_count()
 DEFAULT_PULSARS = 4096
 DEFAULT_UNLABELLED = 32768
 VALIDATION_RATIO = 0.2
@@ -150,50 +151,95 @@ validation_set = pandas.concat([all_pulsars.iloc[num_training_pulsars+1:], \
                              all_RFI.iloc[num_training_RFI+1:]])
 
 
-# Write the list of chosen candidates for each set to csv files
+
+# Extracts pfd files to numpy array files and then deletes the pfd files
+def extract_from_pfd(pfd_name):
+    if not len(glob(WORKING_LOCATION + pfd_name[:-4] + '*')) == N_FEATURES:
+        try:
+            data_obj = pfddata(WORKING_LOCATION + pfd_name)
+            time_phase_data = data_obj.getdata(intervals=48)
+            freq_phase_data = data_obj.getdata(subbands=48)
+            dm_curve_data = data_obj.getdata(DMbins=60)
+            profile_data = data_obj.getdata(phasebins=64)
+
+            np.save(WORKING_LOCATION + pfd_name[:-4] + '_time_phase.npy', time_phase_data)
+            np.save(WORKING_LOCATION + pfd_name[:-4] + '_freq_phase.npy', freq_phase_data)
+            np.save(WORKING_LOCATION + pfd_name[:-4] + '_dm_curve.npy', dm_curve_data)
+            np.save(WORKING_LOCATION + pfd_name[:-4] + '_pulse_profile.npy', profile_data)
+
+            os.unlink(WORKING_LOCATION + pfd_name)
+        except ValueError: 
+            print('Extraction failed: (' + pfd_name + ')')
+
+# Executes the extractions in parallel
+def parallel_extraction(extraction_list):
+    start = time()
+    mp.ThreadPool(NUM_CPUS - 1).imap_unordered(extract_from_pfd, extraction_list)
+    total_time = time() - start
+    print('Extraction time: ' + total_time)
+
+# Downloads pfd files to the specified file paths and returns failed downloads
+def download_pfd(pfd_name):
+    download_path = 'https://apps.datacentral.org.au/smart/media/candidates/' + pfd_name
+    try:
+        urlretrieve(download_path, WORKING_LOCATION + pfd_name)
+        return None
+    except Exception as e:
+        print('Download failed: (' + pfd_name + ') ' + e)
+        return pfd_name
+
+# Executes the downloads in parallel
+def parallel_download(download_list):
+    start = time()
+    failures = mp.ThreadPool(NUM_CPUS - 1).imap_unordered(download_pfd, download_list)
+    total_time = time() - start
+    print('Download time: ' + total_time)
+    return failures
+
+
+# Specify the pfd files to be downloaded - currently not needed
+# labelled_downloads = [(pfd_name, directory + 'labelled/' + pfd_name) for pfd_name in training_set['Pfd path'].values]
+# validation_downloads = [(pfd_name, directory + 'validation/' + pfd_name) for pfd_name in validation_set['Pfd path'].values]
+# unlabelled_downloads = [(pfd_name, directory + 'unlabelled/' + pfd_name) for pfd_name in all_unlabelled['Pfd path'].values]
+
+
+# Make the target directories, if they don't already exist
 os.makedirs(directory + 'labelled/', exist_ok=True)
 os.makedirs(directory + 'validation/', exist_ok=True)
 os.makedirs(directory + 'unlabelled/', exist_ok=True)
 
+
+# Download the pfd files and keep track of failed downloads
+WORKING_LOCATION = directory + 'labelled/'
+labelled_failures = parallel_download(training_set['Pfd path'].values)
+
+WORKING_LOCATION = directory + 'validation/'
+validation_failures = parallel_download(validation_set['Pfd path'].values)
+
+WORKING_LOCATION = directory + 'unlabelled/'
+unlabelled_failures = parallel_download(all_unlabelled['Pfd path'].values)
+
+
+# Remove failed downloads from the dataframes
+# Ensures that the dataframes match the contents of their directories
+training_set = training_set[training_set.Pfd_path not in labelled_failures]
+validation_set = validation_set[validation_set.Pfd_path not in validation_failures]
+all_unlabelled = all_unlabelled[all_unlabelled.Pfd_path not in unlabelled_failures]
+
+
+# Extract the pfd files to numpy arrays and then delete the pfds
+WORKING_LOCATION = directory + 'labelled/'
+parallel_extraction(training_set['Pfd path'].values)
+
+WORKING_LOCATION = directory + 'validation/'
+parallel_extraction(validation_set['Pfd path'].values)
+
+WORKING_LOCATION = directory + 'unlabelled/'
+parallel_extraction(all_unlabelled['Pfd path'].values)
+
+
+# Write the dataframes to csv files
 training_set.to_csv(directory + 'labelled/' + 'training_labels.csv')
 validation_set.to_csv(directory + 'validation/' + 'validation_labels.csv')
 all_unlabelled.to_csv(directory + 'unlabelled/' + 'unlabelled_labels.csv')
-
-
-# Extracts pfd files to numpy array files
-def save_npy_from_pfd (directory, pfd_files, save_to_path):
-    ''' Processing a single candidate at a time '''
-    for i, f in enumerate(pfd_files):
-        if not len(glob(save_to_path + f[:-4] + '*')) == N_FEATURES:
-            try:
-                data_obj = pfddata(directory + f)
-                time_phase_data = data_obj.getdata(intervals=48)
-                freq_phase_data = data_obj.getdata(subbands=48)
-                dm_curve_data = data_obj.getdata(DMbins=60)
-                profile_data = data_obj.getdata(phasebins=64)
-
-                np.save(save_to_path + f[:-4] + '_time_phase.npy', time_phase_data)
-                np.save(save_to_path + f[:-4] + '_freq_phase.npy', freq_phase_data)
-                np.save(save_to_path + f[:-4] + '_dm_curve.npy', dm_curve_data)
-                np.save(save_to_path + f[:-4] + '_pulse_profile.npy', profile_data)
-            except ValueError: 
-                print(f)
-        
-        if (i == int(len(pfd_files) / 2)):
-            print(' ... 50% done!')
-
-
-# Download the appropriate pfd files and convert them to numpy array files
-
-for pfd_name in training_set['Pfd path'].values:
-    download_path = 'https://apps.datacentral.org.au/smart/media/candidates/' + pfd_name
-    save_path = directory + 'labelled/' + pfd_name
-    urlretrieve(download_path, save_path)
-# TO-DO: Figure out exactly what save_npy_from_pfd is doing and fix it
-    save_npy_from_pfd(directory + 'labelled/', pfd_name, directory + 'labelled/')
-    os.unlink(save_path)
-
-# etc. for the validation and unlabelled sets (make sure unlabelled isn't weird)
-
-# Optional TO-DO: research how to make two operations run at once (download and convert)
 
