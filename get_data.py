@@ -209,32 +209,26 @@ os.makedirs(directory + 'validation/', exist_ok=True)
 os.makedirs(directory + 'unlabelled/', exist_ok=True)
 
 
-# Download the pfd files and keep track of failed downloads
+# Specify which set is currently being populated
 WORKING_LOCATION = directory + 'labelled/'
+# Download the pfd files and keep track of failed downloads
 labelled_failures = parallel_download(training_set['Pfd path'].values)
+# Remove failed downloads from the dataframes (so they match the directory contents)
+training_set = training_set[training_set.Pfd_path not in labelled_failures]
+# Extract the pfd files to numpy arrays and then delete the pfds
+parallel_extraction(training_set['Pfd path'].values)
+
+# Repeat for the other two sets:
 
 WORKING_LOCATION = directory + 'validation/'
 validation_failures = parallel_download(validation_set['Pfd path'].values)
+validation_set = validation_set[validation_set.Pfd_path not in validation_failures]
+parallel_extraction(validation_set['Pfd path'].values)
+
 
 WORKING_LOCATION = directory + 'unlabelled/'
 unlabelled_failures = parallel_download(all_unlabelled['Pfd path'].values)
-
-
-# Remove failed downloads from the dataframes
-# Ensures that the dataframes match the contents of their directories
-training_set = training_set[training_set.Pfd_path not in labelled_failures]
-validation_set = validation_set[validation_set.Pfd_path not in validation_failures]
 all_unlabelled = all_unlabelled[all_unlabelled.Pfd_path not in unlabelled_failures]
-
-
-# Extract the pfd files to numpy arrays and then delete the pfds
-WORKING_LOCATION = directory + 'labelled/'
-parallel_extraction(training_set['Pfd path'].values)
-
-WORKING_LOCATION = directory + 'validation/'
-parallel_extraction(validation_set['Pfd path'].values)
-
-WORKING_LOCATION = directory + 'unlabelled/'
 parallel_extraction(all_unlabelled['Pfd path'].values)
 
 
