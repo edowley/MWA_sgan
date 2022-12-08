@@ -1,24 +1,41 @@
 ###############################################################################
 # 
-# This file contains code that will do stuff. WIP
+# This file contains code that will select appropriate training and validation sets,
+# download and process the required files, and output csv files containing the
+# candidate IDs, file names, and labels (if applicable) for each set
 # 
-# This description will be updated eventually:
-#       1. Count the number of pulsars (I guess should also count non-pulsars
-#          just in case there are more non-pulsars than pulsars)
-#       2. Copy across the candidates from smallest class (pulsar, non-pulsar)
-#          and choose a way to select candidates from the other class
-#           - If more non-pulsars, will need to consider how many RFI
-#             and noise candidates to include
-#           - Probably 50/50 is the optimum ratio to not exceed
-#       3. Keep track of the file names of all the candidates and their 
-#          respective labels (0 for non-pulsars, 1 for pulsars).
-#       4. Copy across the other class candidates and append their file
-#          names to the end of the list (including labels)
-#       6. Use array.sort() to sort the candidate list into alphabetical 
-#          order. Use the indices determined in the previous step to do the
-#          same for the labels array.
-#       7. Save the labels as 'validation_labels.csv' and candidates in a
-#          directory called MWA_cands or MWA_validation
+#       1. Takes as arguments the desired number of (labelled) pulsars to use,
+#          the number of unlabelled candidates to use, and the data directory path
+#           - Currently asks the user to remove any existing files from the directory
+#       2. Downloads and reads a csv file of the SMART database as a pandas dataframe,
+#          and creates masks for pulsars, noise, RFI and unlabelled candidates:
+#           - Only candidates with an ID > 20000 are used (else the pfd is unavailable)
+#           - Pulsars: Avg rating >= 4
+#           - Noise: Avg rating <= 2, no mention of RFI
+#           - RFI: Avg rating <= 2, "Notes" column mentions "RFI"
+#           - Unlabelled: Avg rating is NaN
+#          NB: It would be nice to have an RFI column with a 1 or a 0
+#       3. Candidates are pseudo-randomly chosen for the three sets (labelled training,
+#          unlabelled training, and validation) based on the available number of each
+#          candidate type (pulsar, noise, and RFI), the requested number of pulsars,
+#          and the following rules:
+#           - The ratio of pulsars to non-pulsars will be 1:1
+#           - The ratio of noise to RFI will be between 1:1 (preferred) and 2:1
+#           - The ratio of labelled training data to validation data will be 4:1
+#           - Any amount of unlabelled training data can be used
+#          NB: The random seed is currently fixed for testing purposes
+#       4. Each set has a dateframe which holds the candidate IDs and pfd file names,
+#          plus labels if applicable (0 for non-pulsars, 1 for pulsars)
+#       5. The selected candidate pfd files are downloaded to the 'labelled/',
+#          'unlabelled/' or 'validation/' subdirectories, their contents extracted to
+#          numpy array files, and then deleted
+#           - Downloads are done in parallel, currently CPU only
+#           - Ditto for extractions
+#           - The sets are processed one at a time, to avoid cluttering with pfd files
+#           - Failed downloads are tracked
+#          NB: It would be cool to download set 2 in parallel with extracting set 1,
+#          but I don't know how to implement that
+#       6. Finally, the dataframes for each set are written to csv files for later use
 #
 ###############################################################################
 
@@ -29,26 +46,26 @@ import multiprocessing as mp
 import numpy as np
 import os
 import pandas as pd
-import sys.exit
+import sys
 from time import time, sleep
 from ubc_AI.training import pfddata
 from urllib.request import urlretrieve
 
+
 # constants / settings
 NUM_CPUS = mp.cpu_count()
-DEFAULT_PULSARS = 4096
-DEFAULT_UNLABELLED = 32768
+DEFAULT_PULSARS = 32
+DEFAULT_UNLABELLED = 64
+# DEFAULT_PULSARS = 4096
+# DEFAULT_UNLABELLED = 32768
 VALIDATION_RATIO = 0.2
 N_FEATURES = 4
-TRAINING = 0
-VALIDATION = 1
-UNLABELLED = -1
 
 
 # parse arguments
 parser = argparse.ArgumentParser(description='Download pfd files, label, and extract as numpy array files.')
 parser.add_argument('-d', '--directory', help='Directory location to store data',  default="/data/SGAN_Test_Data/")
-parser.add_argument('-n', '--num_pulsars', help='Number of pulsars (and also non-pulsars) to be used', default=DEFAULT_PULSARS, type=int)
+parser.add_argument('-p', '--num_pulsars', help='Number of pulsars (and also non-pulsars) to be used', default=DEFAULT_PULSARS, type=int)
 parser.add_argument('-u', '--num_unlabelled', help='Number of unlabelled candidates to be used', default=DEFAULT_UNLABELLED, type=int)
 
 args = parser.parse_args()
@@ -57,7 +74,8 @@ num_pulsars = args.num_pulsars
 num_unlabelled = args.num_unlabelled
   
 
-# Check if there is already data in the directory
+# Check if there is already data in the target sub-directories
+# This is just a temporary solution
 if os.path.isdir(directory + 'validation/'):
     with os.scandir(directory + 'validation/') as it:
         if any(it):
@@ -76,13 +94,14 @@ if os.path.isdir(directory + 'validation/'):
 # Make the directory, if it doesn't already exist
 os.makedirs(directory, exist_ok=True)
 
+
 # Download database.csv, if it doesn't already exist, and read as a pandas dataframe
 # Contains candidate IDs, PFD URLs, notes, ratings, etc.
 database_path = directory + 'database.csv'
 if not os.path.isfile(database_path):
     urlretrieve('https://apps.datacentral.org.au/smart/candidates/?_export=csv', database_path)
 df = pd.read_csv(database_path)
-df = df.set_index('ID')
+df = df.set_index('ID', inplace=True)
 
 
 print(df)
@@ -91,22 +110,23 @@ print(df)
 # Create masks for pulsars, noise, RFI and unlabelled candidates in the dataframe
 # Only considers pulsars with an ID above 20000 (so the PFD is available)
 # Would be nice if there was a boolean column for RFI, rather than relying on notes
-labelled_mask = (20000 <= df['ID'].to_numpy()) & ~np.isnan(df['Avg rating'].to_numpy())
+labelled_mask = (20000 <= df.index) & ~np.isnan(df['Avg rating'].to_numpy())
 pulsar_mask = (df['Avg rating'].to_numpy() >= 4) & labelled_mask
 noise_mask = (df['Avg rating'].to_numpy() <= 2) & (np.char.find(df['Notes'].to_numpy(), 'RFI') == -1) & labelled_mask
 RFI_mask = (df['Avg rating'].to_numpy() <= 2) & (np.char.find(df['Notes'].to_numpy(), 'RFI') != -1) & labelled_mask
-unlabelled_mask = (20000 <= df['ID'].to_numpy()) & np.isnan(df['Avg rating'].to_numpy())
+unlabelled_mask = (20000 <= df.index) & np.isnan(df['Avg rating'].to_numpy())
 
+# This code is no longer necessary
 # total_num_pulsars = np.count_nonzero(pulsar_mask)
 # total_num_noise = np.count_nonzero(noise_mask)
 # total_num_RFI = np.count_nonzero(RFI_mask)
 # total_num_unlabelled = np.count_nonzero(unlabelled_mask)
 
-# Dataframes separated by candidate type, containing the candidate ID and Pfd path
-all_pulsars = df[pulsar_mask][['ID', 'Pfd path']]
-all_noise = df[noise_mask][['ID', 'Pfd path']]
-all_RFI = df[RFI_mask][['ID', 'Pfd path']]
-all_unlabelled = df[unlablled_mask][['ID', 'Pfd path']]
+# Dataframes for each candidate type, containing the pfd path and candidate ID (index)
+all_pulsars = df[pulsar_mask][['Pfd path']]
+all_noise = df[noise_mask][['Pfd path']]
+all_RFI = df[RFI_mask][['Pfd path']]
+all_unlabelled = df[unlablled_mask][['Pfd path']]
 
 # Add the labels (1 for pulsar, 0 for non-pulsar)
 all_pulsars['Classification'] = 1
@@ -120,13 +140,14 @@ total_num_RFI = len(all_RFI.index)
 total_num_unlabelled = len(all_unlabelled.index)
 
 # The number of each candidate type to use
+# Based on the selection rules described at the top
 num_pulsars = min(num_pulsars, total_num_pulsars, 2*total_num_noise, 3*total_num_RFI)
 num_RFI = min(floor(num_pulsars/2), total_num_RFI)
 num_noise = num_pulsars - num_RFI
 num_unlabelled = min(num_unlabelled, total_num_unlabelled)
 
 # Randomly sample the required number of each candidate type
-# (This is actually an in-place operation)
+# (This is apparently an in-place operation, despite what it looks like)
 all_pulsars = all_pulsars.sample(n = num_pulsars, random_state = 1)
 all_noise = all_noise.sample(n = num_noise, random_state = 1)
 all_RFI = all_RFI.sample(n = num_RFI, random_state = 1)
