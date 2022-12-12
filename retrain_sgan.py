@@ -52,70 +52,61 @@ def dir_path(string):
 1 -> Pulsar
 -1 -> Unlabelled Candidate
 '''
+# Parse arguments
 parser = argparse.ArgumentParser(description='Re-train SGAN machine learning model using files sourced by get_data.py')
 parser.add_argument('-i', '--input_path', help='Absolute path of input directory', default='/data/SGAN_Test_Data/')
-parser.add_argument('-o', '--output', help='Absolute output path to save model',  default='/data/SGAN_Test_Data/new_models/')
+parser.add_argument('-o', '--output_path', help='Absolute output path to save model',  default='/data/SGAN_Test_Data/new_models/')
 parser.add_argument('-b', '--batch_size', help='No. of pfd files that will be read in one batch', default='16', type=int)
 
 args = parser.parse_args()
 path_to_data = args.input_path
+output_path = args.output_path
 batch_size = args.batch_size
-output_path = args.output
 
+# Check the the specified input directory exists
 dir_path(path_to_data)
 
+# Absolute paths to important files and subdirectories
 labelled_data_path = path_to_data + 'labelled/' 
 validation_data_path = path_to_data + 'validation/'
 unlabelled_data_path = path_to_data + 'unlabelled/'
-
 training_labels_file = labelled_data_path + 'training_labels.csv'
 validation_labels_file = validation_data_path + 'validation_labels.csv'
 unlabelled_labels_file = unlabelled_data_path + 'unlabelled_labels.csv'
 
-training_labels = pd.read_csv(training_labels_file)
-validation_labels = pd.read_csv(validation_labels_file)
-unlabelled_labels = pd.read_csv(unlabelled_labels_file)
+# Read the label files as pandas dataframes
+training_labels = pd.read_csv(training_labels_file, header = 0, index_col = 0, \
+                dtype = {'ID': int, 'Pfd path': 'string', 'Classification': int})
+validation_labels = pd.read_csv(validation_labels_file, header = 0, index_col = 0, \
+                dtype = {'ID': int, 'Pfd path': 'string', 'Classification': int})
+unlabelled_labels = pd.read_csv(unlabelled_labels_file, header = 0, index_col = 0, \
+                dtype = {'ID': int, 'Pfd path': 'string', 'Classification': int})
 
+# List the absolute paths to all of the candidate pfd files in each folder
+# These no longer exist, but that's fine (see next comment)
+training_files = [labelled_data_path + f for f in training_labels['Pfd path'].to_numpy()] 
+validation_files = [validation_data_path + f for f in validation_labels['Pfd path'].to_numpy()]
+unlabelled_files = [unlabelled_data_path + f for f in unlabelled_labels['Pfd path'].to_numpy()]
 
-# for index, row in training_labels.iterrows():
-#     if not os.path.isfile(path_to_data + row['Filename']):
-#         raise FileNotFoundError(errno.ENOENT, os.strerror(errno.ENOENT), row['Filename'])
-
-pfd_files = training_labels['Filename'].to_numpy()
-validation_files = validation_labels['Filename'].to_numpy()
-unlabelled_files = unlabelled_labels['Filename'].to_numpy()
-# pfd_files = sorted(glob.glob(path_to_data + '*.pfd'))
-# validation_files = sorted(glob.glob(validation_data_path + '*.pfd'))
-# unlabelled_files = sorted(glob.glob(unlabelled_data_path + '*.pfd'))
-
-pfd_files = [path_to_data+f for f in pfd_files]
-validation_files = [validation_data_path+f for f in validation_files]
-unlabelled_files = [unlabelled_data_path+f for f in unlabelled_files]
-
-
-#basename_pfd_files = [os.path.basename(filename) for filename in pfd_files]
 
 ''' Load Data'''
-dm_curve_combined_array = [np.load(filename[:-4] + '_dm_curve.npy') for filename in pfd_files]
-pulse_profile_combined_array = [np.load(filename[:-4] + '_pulse_profile.npy') for filename in pfd_files]
-freq_phase_combined_array = [np.load(filename[:-4] + '_freq_phase.npy') for filename in pfd_files]
-time_phase_combined_array = [np.load(filename[:-4] + '_time_phase.npy') for filename in pfd_files]
+# Uses filename[:4] to remove the '.pfd' from the end of the filename
+dm_curve_combined_array = [np.load(filename[:-4] + '_dm_curve.npy') for filename in training_files]
+pulse_profile_combined_array = [np.load(filename[:-4] + '_pulse_profile.npy') for filename in training_files]
+freq_phase_combined_array = [np.load(filename[:-4] + '_freq_phase.npy') for filename in training_files]
+time_phase_combined_array = [np.load(filename[:-4] + '_time_phase.npy') for filename in training_files]
 
-''' Reshaping the data for the neural-nets to read '''
-
+''' Reshape the data for the neural-nets to read '''
 reshaped_time_phase = [np.reshape(f,(48,48,1)) for f in time_phase_combined_array]
 reshaped_freq_phase = [np.reshape(f,(48,48,1)) for f in freq_phase_combined_array]
 reshaped_pulse_profile = [np.reshape(f,(64,1)) for f in pulse_profile_combined_array]
 reshaped_dm_curve = [np.reshape(f,(60,1)) for f in dm_curve_combined_array]
 
 ''' Rescale the data between -1 and +1 '''
-
 dm_curve_data = np.array([np.interp(a, (a.min(), a.max()), (-1, +1)) for a in reshaped_dm_curve])
 pulse_profile_data = np.array([np.interp(a, (a.min(), a.max()), (-1, +1)) for a in reshaped_pulse_profile])
 freq_phase_data = np.array([np.interp(a, (a.min(), a.max()), (-1, +1)) for a in reshaped_freq_phase])
 time_phase_data = np.array([np.interp(a, (a.min(), a.max()), (-1, +1)) for a in reshaped_time_phase])
-
-
 
 
 ''' Repeat above steps for validation data'''
@@ -154,6 +145,9 @@ dm_curve_unlabelled_data = np.array([np.interp(a, (a.min(), a.max()), (-1, +1)) 
 pulse_profile_unlabelled_data = np.array([np.interp(a, (a.min(), a.max()), (-1, +1)) for a in reshaped_pulse_profile_unlabelled])
 freq_phase_unlabelled_data = np.array([np.interp(a, (a.min(), a.max()), (-1, +1)) for a in reshaped_freq_phase_unlabelled])
 time_phase_unlabelled_data = np.array([np.interp(a, (a.min(), a.max()), (-1, +1)) for a in reshaped_time_phase_unlabelled])
+
+
+# CHECKED UP TO THIS POINT
 
 
 label_population = training_labels['Classification'].value_counts()

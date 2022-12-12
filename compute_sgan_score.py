@@ -28,10 +28,10 @@ batch_size = args.batch_size
 
 dir_path(path_to_data)
 
-# get the candidate file names from validation_labels.csv
+# Get the candidate file names from validation_labels.csv
 with open(path_to_data + "validation_labels.csv") as f:
     candidate_files = [path_to_data + row.split(',')[1] for row in f]
-candidate_files = candidate_files[1:] # first entry is title 
+candidate_files = candidate_files[1:] # The first entry is the header 
 basename_candidate_files = [os.path.basename(filename) for filename in candidate_files]
 
 

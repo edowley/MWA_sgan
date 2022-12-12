@@ -19,13 +19,15 @@ The training/validation set used to train this network is not yet publicly avail
 3. Run retrain_sgan.py. If wanting to retrain multiple sgan networks successively, a bash script, retrain_multiple_sgan.sh, has also been included within the repo.
 4. Evaluate the performance of the network. compute_sgan_score.py saves a csv file containing the networks predictions for all the files in the validation set. calculate_metrics.py loads up the desired network, makes predictions of the validation set and outputs the accuracy, f1-score, recall and precision. 
   
-**Testing/Prediciton Using SGAN Model**
+**Testing/Prediction Using SGAN Model**
 
 As mentioned previously, I would recommend implementing the model found in the directory "MWA_best_retrained_models/attempt_20/" for prediction tasks (on MWA data). The procedure to implement this would be similar to that of retraining the model from scratch. To reiterate:
 1. Set up environment
 2. Load up model
 3. (Optional) Extract feature plots from pfd files and save as npy files. This step is optional because saving the npy files is only important if you are planning on feeding the pfd file/s through the network more than once. It saves significant computation to load up 4 npy files instead of having to extract the data from the encoded pfd file each time running. 
 4. Feed the data through the network and obtain predictions. This could be done by using compute_sgan_score.py and modifying the directory of the input data. (Would also need to obtain file names from a source other than validation_labels.csv.)
+
+**New Contributions**
 
 ## Docker notes
 
@@ -63,3 +65,8 @@ docker exec -it [CONTAINER] bash
 ```
 
 Note that the default directory in the container is currently /code/presto/src, not /MWA_sgan.
+
+## SMART Database
+Candidates are currently sourced from https://apps.datacentral.org.au/smart/media/candidates/ using https://apps.datacentral.org.au/smart/candidates/?_export=csv as a reference.
+This database will soon be receiving updates to make it more compatible with machine learning applications, which will necessitate changes to the code. In particular, the first half of get_data.py.
+(Also note that other scripts, e.g. retrain_sgan.py, refer to columns in the label csv files by their header names, which could be affected by these changes.)
