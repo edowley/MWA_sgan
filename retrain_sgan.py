@@ -1,6 +1,18 @@
 #!/usr/bin/env python
 # coding: utf-8
 
+###############################################################################
+# 
+# This file contains code that will retrain the SGAN using the labelled, unlabelled,
+# and validation sets constructed by get_data.py. It assumes that the input directory
+# is the same as the directory used by get_data.py.
+# 
+#       1. This description,
+#          has not been written yet.
+#           - Come back later
+#
+###############################################################################
+
 import tensorflow as tf
 import matplotlib.pyplot as plt
 import numpy as np
@@ -10,7 +22,6 @@ from sklearn.metrics import confusion_matrix, f1_score, precision_score, recall_
 from keras.layers.convolutional import UpSampling2D, Conv2D
 from keras import backend
 from keras.optimizers import Adam
-#from keras import optimizers
 import numpy as np
 import math, time, pickle
 import itertools
@@ -24,6 +35,7 @@ import argparse, errno
 import pandas as pd
 from classifiers import Train_SGAN_DM_Curve, Train_SGAN_Pulse_Profile, Train_SGAN_Freq_Phase, Train_SGAN_Time_Phase
 from time import time
+
 class NotADirectoryError(Exception):
     pass
 
@@ -35,33 +47,30 @@ def dir_path(string):
 
 
 '''
-#Class Labels format
+# Class Labels format
 0 -> Non-Pulsar
 1 -> Pulsar
 -1 -> Unlabelled Candidate
 '''
-parser = argparse.ArgumentParser(description='Re-train SGAN Machine Learning Model using User input PFD Files')
-parser.add_argument('-i', '--input_path', help='Absolute path of Input directory', default='/data/SGAN_Test_Data/MWA_cands/')
-parser.add_argument('-v', '--validation_path', help='Absolute path of validation data directory', default='/data/SGAN_Test_Data/MWA_validation/')
-parser.add_argument('-u', '--unlabelled_path', help='Absolute path of unlabelled data directory', default='/data/SGAN_Test_Data/MWA_unlabelled_cands/')
-parser.add_argument('-o', '--output', help='Output path to save model',  default='/data/SGAN_Test_Data/new_models/')
-parser.add_argument('-l', '--labels', help='File with training data classification labels',  default="/data/SGAN_Test_Data/MWA_cands/training_labels.csv")
-parser.add_argument('-w', '--validation_labels', help='File with validation classification labels',  default="/data/SGAN_Test_Data/MWA_validation/validation_labels.csv")
-parser.add_argument('-x', '--unlabelled_labels', help='File with unlabelled training data classification labels',  default="/data/SGAN_Test_Data/MWA_unlabelled_cands/training_labels.csv")
+parser = argparse.ArgumentParser(description='Re-train SGAN machine learning model using files sourced by get_data.py')
+parser.add_argument('-i', '--input_path', help='Absolute path of input directory', default='/data/SGAN_Test_Data/')
+parser.add_argument('-o', '--output', help='Absolute output path to save model',  default='/data/SGAN_Test_Data/new_models/')
 parser.add_argument('-b', '--batch_size', help='No. of pfd files that will be read in one batch', default='16', type=int)
-
-
 
 args = parser.parse_args()
 path_to_data = args.input_path
-validation_data_path = args.validation_path
-unlabelled_data_path = args.unlabelled_path
 batch_size = args.batch_size
 output_path = args.output
-training_labels_file = args.labels
-validation_labels_file = args.validation_labels
-unlabelled_labels_file = args.unlabelled_labels
+
 dir_path(path_to_data)
+
+labelled_data_path = path_to_data + 'labelled/' 
+validation_data_path = path_to_data + 'validation/'
+unlabelled_data_path = path_to_data + 'unlabelled/'
+
+training_labels_file = labelled_data_path + 'training_labels.csv'
+validation_labels_file = validation_data_path + 'validation_labels.csv'
+unlabelled_labels_file = unlabelled_data_path + 'unlabelled_labels.csv'
 
 training_labels = pd.read_csv(training_labels_file)
 validation_labels = pd.read_csv(validation_labels_file)

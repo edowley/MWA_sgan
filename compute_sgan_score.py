@@ -16,57 +16,31 @@ def dir_path(string):
 
 
 parser = argparse.ArgumentParser(description='Score pfd files based on SGAN Machine Learning Model')
-parser.add_argument('-l', '--local', help='1 if running locally, 0 (default) if running in container', default=0, type=int)
-# parser.add_argument('-i', '--input_path', help='Absolute path of Input directory', default="/data/SGAN_Test_Data/MWA_validation/")
-# parser.add_argument('-o', '--output', help='Output file name',  default="/data/SGAN_Test_Data/")
+parser.add_argument('-i', '--input_path', help='Absolute path of input directory', default="/data/SGAN_Test_Data/validation/")
+parser.add_argument('-o', '--output', help='Absolute path of output directory',  default="/data/SGAN_Test_Data/")
+parser.add_argument('-m', '--models', help='Absolute path of models directory',  default="/MWA_sgan/MWA_best_retrained_models/attempt_20/")
 parser.add_argument('-b', '--batch_size', help='No. of pfd files that will be read in one batch', default=1, type=int)
 args = parser.parse_args()
-local = args.local
-# path_to_data = args.input_path
-# output_path = args.output
+path_to_data = args.input_path
+output_path = args.output
+path_to_models = args.models
 batch_size = args.batch_size
-
-if local == 1:
-    path_to_data = "/home/ethandowley/SGAN_Test_Data/MWA_validation/"
-    output_path = "/home/ethandowley/SGAN_Test_Data/"
-else:
-    path_to_data = "/data/SGAN_Test_Data/MWA_validation/"
-    output_path = "/data/SGAN_Test_Data/"
 
 dir_path(path_to_data)
 
-# get the candidate file names from candidate_labels.csv
+# get the candidate file names from validation_labels.csv
 with open(path_to_data + "validation_labels.csv") as f:
-    candidate_files = [path_to_data + row.split(',')[0] for row in f]
+    candidate_files = [path_to_data + row.split(',')[1] for row in f]
 candidate_files = candidate_files[1:] # first entry is title 
 basename_candidate_files = [os.path.basename(filename) for filename in candidate_files]
 
 
-labelled_samples = 50814
-unlabelled_samples = 265172
-attempt_no = 4
-# freq_phase_model = load_model('semi_supervised_trained_models/freq_phase_best_discriminator_model_labelled_%d_unlabelled_%d_trial_%d.h5'%(labelled_samples, unlabelled_samples,  attempt_no))
-# time_phase_model = load_model('semi_supervised_trained_models/time_phase_best_discriminator_model_labelled_%d_unlabelled_%d_trial_%d.h5'%(labelled_samples, unlabelled_samples,  attempt_no))
-# dm_curve_model = load_model('semi_supervised_trained_models/dm_curve_best_discriminator_model_labelled_%d_unlabelled_%d_trial_%d.h5'%(labelled_samples, unlabelled_samples,  attempt_no))
-# pulse_profile_model = load_model('semi_supervised_trained_models/pulse_profile_best_discriminator_model_labelled_%d_unlabelled_%d_trial_%d.h5'%(labelled_samples, unlabelled_samples,  attempt_no))
+dm_curve_model = load_model(path_to_models + 'dm_curve_best_discriminator_model.h5')
+freq_phase_model = load_model(path_to_models + 'freq_phase_best_discriminator_model.h5')
+pulse_profile_model = load_model(path_to_models + 'pulse_profile_best_discriminator_model.h5')
+time_phase_model = load_model(path_to_models + 'time_phase_best_discriminator_model.h5')
 
-if local == 1:
-    dm_curve_model = load_model('home/ethandowley/MWA_sgan/MWA_best_retrained_models/attempt_20/dm_curve_best_discriminator_model.h5')
-    freq_phase_model = load_model('home/ethandowley/MWA_sgan/MWA_best_retrained_models/attempt_20/freq_phase_best_discriminator_model.h5')
-    pulse_profile_model = load_model('home/ethandowley/MWA_sgan/MWA_best_retrained_models/attempt_20/pulse_profile_best_discriminator_model.h5')
-    time_phase_model = load_model('home/ethandowley/MWA_sgan/MWA_best_retrained_models/attempt_20/time_phase_best_discriminator_model.h5')
-else:
-    dm_curve_model = load_model('/MWA_sgan/MWA_best_retrained_models/attempt_20/dm_curve_best_discriminator_model.h5')
-    freq_phase_model = load_model('/MWA_sgan/MWA_best_retrained_models/attempt_20/freq_phase_best_discriminator_model.h5')
-    pulse_profile_model = load_model('/MWA_sgan/MWA_best_retrained_models/attempt_20/pulse_profile_best_discriminator_model.h5')
-    time_phase_model = load_model('/MWA_sgan/MWA_best_retrained_models/attempt_20/time_phase_best_discriminator_model.h5')
-
-# logistic_model = pickle.load(open('semi_supervised_trained_models/logistic_regression_labelled_%d_unlabelled_%d_trial_%d.pkl'%(labelled_samples, unlabelled_samples, attempt_no), 'rb'))
-# logistic_model = pickle.load(open('new_models/LogisticRegressor.pkl', 'rb'))
-if local == 1:
-    logistic_model = pickle.load(open('home/ethandowley/MWA_sgan/MWA_best_retrained_models/attempt_20/sgan_retrained.pkl', 'rb'))
-else:
-    logistic_model = pickle.load(open('/MWA_sgan/MWA_best_retrained_models/attempt_20/sgan_retrained.pkl', 'rb'))
+logistic_model = pickle.load(open(path_to_models + 'sgan_retrained.pkl', 'rb'))
 
 
 dm_curve_combined_array = [np.load(filename[:-4] + '_dm_curve.npy') for filename in candidate_files]
@@ -90,10 +64,6 @@ predictions_time_phase = time_phase_model.predict([time_phase_data])
 predictions_dm_curve = dm_curve_model.predict([dm_curve_data])
 predictions_pulse_profile = pulse_profile_model.predict([pulse_profile_data])
 
-# predictions_freq_phase = predictions_freq_phase[:, 1]
-# predictions_time_phase = predictions_time_phase[:, 1]
-# predictions_dm_curve = predictions_dm_curve[:, 1]
-# predictions_pulse_profile = predictions_pulse_profile[:, 1]
 
 # print(predictions_freq_phase)
 # print(predictions_time_phase)
