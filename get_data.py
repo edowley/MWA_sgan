@@ -25,7 +25,7 @@
 #           - Any amount of unlabelled training data can be used
 #          NB: The random seed is currently fixed for testing purposes.
 #       4. Each set has a dateframe which holds the candidate IDs and pfd file names,
-#          plus labels (1 for pulsar, 0 for non-pulsar, -1 for unlabelled).
+#          plus labels if applicable (1 for pulsar, 0 for non-pulsar).
 #       5. The selected candidate pfd files are downloaded to the 'labelled/',
 #          'unlabelled/' or 'validation/' subdirectories, their contents extracted to
 #          numpy array files, and then deleted.
@@ -86,7 +86,6 @@ training_labels_file = labelled_data_path + 'training_labels.csv'
 validation_labels_file = validation_data_path + 'validation_labels.csv'
 unlabelled_labels_file = unlabelled_data_path + 'unlabelled_labels.csv'
 
-
 # Makes directories, or checks that they are empty if they already exist (temporary solution)
 def directory_setup(path):
     if os.path.isdir(path):
@@ -128,8 +127,8 @@ df = pd.read_csv(database_csv_path, header = 0, index_col = 'ID', usecols = ['ID
 # Would be nice if there was a boolean column for RFI, rather than relying on notes
 labelled_mask = (20000 <= df.index) & ~np.isnan(df['Avg rating'].to_numpy(dtype = float))
 pulsar_mask = (df['Avg rating'].to_numpy(dtype = float) >= 4) & labelled_mask
-noise_mask = (df['Avg rating'].to_numpy(dtype = float) <= 2) & (np.char.find(df['Notes'].to_numpy(dtype = 'str'), 'RFI') == -1) & labelled_mask
-RFI_mask = (df['Avg rating'].to_numpy(dtype = float) <= 2) & (np.char.find(df['Notes'].to_numpy(dtype = 'str'), 'RFI') != -1) & labelled_mask
+noise_mask = (df['Avg rating'].to_numpy(dtype = float) <= 2) & (np.char.find(df['Notes'].to_numpy(dtype = 'U'), 'RFI') == -1) & labelled_mask
+RFI_mask = (df['Avg rating'].to_numpy(dtype = float) <= 2) & (np.char.find(df['Notes'].to_numpy(dtype = 'U'), 'RFI') != -1) & labelled_mask
 unlabelled_mask = (20000 <= df.index) & np.isnan(df['Avg rating'].to_numpy(dtype = float))
 
 # Dataframes for each candidate type, containing the pfd name and candidate ID (index)
@@ -138,11 +137,10 @@ all_noise = df[noise_mask][['Pfd path']]
 all_RFI = df[RFI_mask][['Pfd path']]
 all_unlabelled = df[unlabelled_mask][['Pfd path']]
 
-# Add the labels (1 for pulsar, 0 for non-pulsar, -1 for unlabelled)
+# Add the labels (1 for pulsar, 0 for non-pulsar)
 all_pulsars['Classification'] = 1
 all_noise['Classification'] = 0
 all_RFI['Classification'] = 0
-all_unlabelled['Classification'] = -1
 
 # The total number of each candidate type available
 total_num_pulsars = len(all_pulsars.index)
@@ -158,6 +156,7 @@ num_noise = num_pulsars - num_RFI
 num_unlabelled = min(num_unlabelled, total_num_unlabelled)
 
 # Randomly sample the required number of each candidate type
+# (Apparently this is actually an in-place operation)
 all_pulsars = all_pulsars.sample(n = num_pulsars, random_state = 1)
 all_noise = all_noise.sample(n = num_noise, random_state = 1)
 all_RFI = all_RFI.sample(n = num_RFI, random_state = 1)
