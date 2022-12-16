@@ -1,4 +1,4 @@
-FROM tensorflow/tensorflow:latest-gpu
+FROM tensorflow/tensorflow:2.11.0-gpu
 
 LABEL MWA_sgan.version="1.1"
 
@@ -23,7 +23,6 @@ RUN apt-get update -qq && \
     nano \
     pgplot5 \
     python3-dev \
-    python3-numpy \
     python3-pip \
     tcsh \
     wget && \
@@ -35,14 +34,13 @@ ENV PGPLOT_DIR=/usr/local/pgplot
 ENV PGPLOT_DEV=/Xserve
 
 # Install python dependancies
-RUN pip3 install argparse \
-    astropy \
-    matplotlib \
-    numpy \
-    pandas \
-    scikit-learn \
-    scipy
-
+RUN pip3 install argparse==1.4.0 \
+    astropy==5.1.1 \
+    matplotlib==3.6.2 \
+    numpy==1.23.4 \
+    pandas==1.5.2 \
+    scikit-learn==1.1.3 \
+    scipy==1.9.3
 
 # Obtain presto files
 WORKDIR /code
@@ -62,8 +60,7 @@ RUN pip3 install /code/presto && \
     sed -i 's/env python/env python3/' /code/presto/bin/*py && \
     python3 tests/test_presto_python.py 
 
-
-# Installs all the C dependancies -----------------------------
+# Install all the C dependancies:
 WORKDIR /home/soft
 
 # Install psrcat
@@ -94,4 +91,9 @@ RUN make makewisdom && \
     make clean
 ENV PATH="/code/presto/bin/:${PATH}"
 
+# CUDA environment variables
+ENV PATH="/usr/local/cuda/bin/:${PATH}"
+ENV LD_LIBRARY_PATH="/usr/local/cuda/lib64/:${LD_LIBRARY_PATH}"
+
+# Set the default working directory
 WORKDIR /MWA_sgan

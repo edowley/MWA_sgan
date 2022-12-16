@@ -50,11 +50,13 @@ parser = argparse.ArgumentParser(description='Re-train SGAN machine learning mod
 parser.add_argument('-i', '--input_path', help='Absolute path of input directory for candidate data', default='/data/SGAN_Test_Data/')
 parser.add_argument('-m', '--models', help='Absolute path of output directory for saving models',  default='/data/SGAN_Test_Data/models/')
 parser.add_argument('-b', '--batch_size', help='No. of pfd files that will be read in one batch', default='16', type=int)
+parser.add_argument('-e', '--num_epochs', help='No. of epochs to train', default='20', type=int)
 
 args = parser.parse_args()
 path_to_data = args.input_path
 output_path = args.models
 batch_size = args.batch_size
+num_epochs = args.num_epochs
 
 # Check that the specified input and output directories exist
 dir_path(path_to_data)
@@ -114,6 +116,7 @@ pulse_profile_data = np.array([np.interp(a, (a.min(), a.max()), (-1, +1)) for a 
 freq_phase_data = np.array([np.interp(a, (a.min(), a.max()), (-1, +1)) for a in reshaped_freq_phase])
 time_phase_data = np.array([np.interp(a, (a.min(), a.max()), (-1, +1)) for a in reshaped_time_phase])
 
+print('Labelled training data loaded')
 
 ''' Repeat above steps for validation data'''
 
@@ -132,6 +135,7 @@ pulse_profile_validation_data = np.array([np.interp(a, (a.min(), a.max()), (-1, 
 freq_phase_validation_data = np.array([np.interp(a, (a.min(), a.max()), (-1, +1)) for a in reshaped_freq_phase_validation])
 time_phase_validation_data = np.array([np.interp(a, (a.min(), a.max()), (-1, +1)) for a in reshaped_time_phase_validation])
 
+print('Validation data loaded')
 
 ''' Repeat above steps for unlabelled data '''
 
@@ -150,23 +154,38 @@ pulse_profile_unlabelled_data = np.array([np.interp(a, (a.min(), a.max()), (-1, 
 freq_phase_unlabelled_data = np.array([np.interp(a, (a.min(), a.max()), (-1, +1)) for a in reshaped_freq_phase_unlabelled])
 time_phase_unlabelled_data = np.array([np.interp(a, (a.min(), a.max()), (-1, +1)) for a in reshaped_time_phase_unlabelled])
 
+print('Unlabelled data loaded')
+
 
 ''' Train the models '''
 
+# The learning rates can be fine-tuned
+learning_rate_discriminator = [0.0008, 0.001, 0.0002, 0.0002] 
+learning_rate_gan = [0.003, 0.001, 0.0002, 0.0002]
+
+dm_curve_instance = Train_SGAN_DM_Curve(output_path, dm_curve_data, training_labels, dm_curve_validation_data, validation_labels, dm_curve_unlabelled_data, unlabelled_lables, batch_size \
+                    lr_dis = learning_rate_discriminator[0], lr_gan = learning_rate_gan[0])
+pulse_profile_instance = Train_SGAN_Pulse_Profile(output_path, pulse_profile_data, training_labels, pulse_profile_validation_data, validation_labels, pulse_profile_unlabelled_data, unlabelled_lables, batch_size \
+                    lr_dis = learning_rate_discriminator[1], lr_gan = learning_rate_gan[1])
+freq_phase_instance = Train_SGAN_Freq_Phase(output_path, freq_phase_data, training_labels, freq_phase_validation_data, validation_labels, freq_phase_unlabelled_data, unlabelled_lables, batch_size \
+                    lr_dis = learning_rate_discriminator[2], lr_gan = learning_rate_gan[2])
+time_phase_instance = Train_SGAN_Time_Phase(output_path, time_phase_data, training_labels, time_phase_validation_data, validation_labels, time_phase_unlabelled_data, unlabelled_lables, batch_size \
+                    lr_dis = learning_rate_discriminator[3], lr_gan = learning_rate_gan[3])
+
+'''
+# Use default learning rates
 dm_curve_instance = Train_SGAN_DM_Curve(output_path, dm_curve_data, training_labels, dm_curve_validation_data, validation_labels, dm_curve_unlabelled_data, unlabelled_lables, batch_size)
 pulse_profile_instance = Train_SGAN_Pulse_Profile(output_path, pulse_profile_data, training_labels, pulse_profile_validation_data, validation_labels, pulse_profile_unlabelled_data, unlabelled_lables, batch_size)
 freq_phase_instance = Train_SGAN_Freq_Phase(output_path, freq_phase_data, training_labels, freq_phase_validation_data, validation_labels, freq_phase_unlabelled_data, unlabelled_lables, batch_size)
 time_phase_instance = Train_SGAN_Time_Phase(output_path, time_phase_data, training_labels, time_phase_validation_data, validation_labels, time_phase_unlabelled_data, unlabelled_lables, batch_size)
-
-# The number of epochs to use for each model
-NUM_EPOCHS = 20
+'''
 
 # Train the DM Curve models
 start = time()
 d_model, c_model = dm_curve_instance.define_discriminator()
 g_model = dm_curve_instance.define_generator()
 gan_model = dm_curve_instance.define_gan(g_model, d_model)
-dm_curve_instance.train(g_model, d_model, c_model, gan_model, n_epochs=NUM_EPOCHS)
+dm_curve_instance.train(g_model, d_model, c_model, gan_model, n_epochs=num_epochs)
 end = time()
 print('DM Curve Model Retraining has been completed')
 print(f'Time = {end-start:.3f} seconds')
@@ -176,7 +195,7 @@ start = time()
 d_model, c_model = pulse_profile_instance.define_discriminator()
 g_model = pulse_profile_instance.define_generator()
 gan_model = pulse_profile_instance.define_gan(g_model, d_model)
-pulse_profile_instance.train(g_model, d_model, c_model, gan_model, n_epochs=NUM_EPOCHS)
+pulse_profile_instance.train(g_model, d_model, c_model, gan_model, n_epochs=num_epochs)
 end = time()
 print('Pulse Profile Model Retraining has been completed')
 print(f'Time = {end-start:.3f} seconds')
@@ -186,7 +205,7 @@ start = time()
 d_model, c_model = freq_phase_instance.define_discriminator()
 g_model = freq_phase_instance.define_generator()
 gan_model = freq_phase_instance.define_gan(g_model, d_model)
-freq_phase_instance.train(g_model, d_model, c_model, gan_model, n_epochs=NUM_EPOCHS)
+freq_phase_instance.train(g_model, d_model, c_model, gan_model, n_epochs=num_epochs)
 end = time()
 print('Freq-Phase Model Retraining has been completed')
 print(f'Time = {end-start:.3f} seconds')
@@ -196,7 +215,7 @@ start = time()
 d_model, c_model = time_phase_instance.define_discriminator()
 g_model = time_phase_instance.define_generator()
 gan_model = time_phase_instance.define_gan(g_model, d_model)
-time_phase_instance.train(g_model, d_model, c_model, gan_model, n_epochs=NUM_EPOCHS)
+time_phase_instance.train(g_model, d_model, c_model, gan_model, n_epochs=num_epochs)
 end = time()
 print('Time-Phase Model Retraining has been completed')
 print(f'Time = {end-start:.3f} seconds')

@@ -19,7 +19,7 @@ class Train_SGAN_DM_Curve:
        Class to retrain SGAN using DM Curve Data.
 
                                                  """
-    def __init__(self, output_path, data, labels, validation_data, validation_labels, unlabelled_data, unlabelled_labels, batch_size, bin_size=60):
+    def __init__(self, output_path, data, labels, validation_data, validation_labels, unlabelled_data, unlabelled_labels, batch_size, lr_dis=0.0008, lr_gan=0.003, bin_size=60):
         self.output_path = output_path
         self.data = data
         self.labels = labels
@@ -28,6 +28,8 @@ class Train_SGAN_DM_Curve:
         self.unlabelled_data = unlabelled_data
         self.unlabelled_labels = unlabelled_labels
         self.bin_size = bin_size
+        self.lr_dis = lr_dis
+        self.lr_gan = lr_gan
         self.batch_size = batch_size
 
     def Conv1DTranspose(self, input_tensor, filters, kernel_size, strides=2, padding='same'):
@@ -72,12 +74,12 @@ class Train_SGAN_DM_Curve:
         c_out_layer = Activation('softmax')(fe)
         # define and compile supervised discriminator model
         c_model = Model(in_image, c_out_layer)
-        c_model.compile(loss='sparse_categorical_crossentropy', optimizer=Adam(learning_rate=0.0008, beta_1=0.5), metrics=['accuracy'])
+        c_model.compile(loss='sparse_categorical_crossentropy', optimizer=Adam(learning_rate=self.lr_dis, beta_1=0.5), metrics=['accuracy'])
         # unsupervised output
         d_out_layer = Lambda(self.custom_activation)(fe)
         # define and compile unsupervised discriminator model
         d_model = Model(in_image, d_out_layer)
-        d_model.compile(loss='binary_crossentropy', optimizer=Adam(learning_rate=0.0008, beta_1=0.5))
+        d_model.compile(loss='binary_crossentropy', optimizer=Adam(learning_rate=self.lr_dis, beta_1=0.5))
         return d_model, c_model
 
     def define_generator(self, latent_dim=100):
@@ -112,7 +114,7 @@ class Train_SGAN_DM_Curve:
         # define gan model as taking noise and outputting a classification
         model = Model(g_model.input, gan_output)
         # compile model
-        opt = Adam(learning_rate=0.003, beta_1=0.5)
+        opt = Adam(learning_rate=self.lr_gan, beta_1=0.5)
         model.compile(loss='binary_crossentropy', optimizer=opt)
         return model
 
@@ -203,15 +205,15 @@ class Train_SGAN_DM_Curve:
         
         validation_X, validation_y = validation_dataset
         _, acc = c_model.evaluate(validation_X, validation_y, verbose=0)
-        with open(output_path + 'training_logs/model_performance_sgan_dm_curve.txt', 'a') as f:
-            f.write(output_path + 'intermediate_models/dm_curve_c_model_epoch_%d.h5' % int(epoch_number) + ',' + '%.3f' % (acc) + '\n')
+        with open(self.output_path + 'training_logs/model_performance_sgan_dm_curve.txt', 'a') as f:
+            f.write(self.output_path + 'intermediate_models/dm_curve_c_model_epoch_%d.h5' % int(epoch_number) + ',' + '%.3f' % (acc) + '\n')
 
         if save_best_model == True:
             if acc > model_accuracy:
                 print('Current Model has %.3f training accuracy which is better than previous best of %.3f. Will save it as as new best model.' % (acc * 100, model_accuracy * 100 ))
-                filename2 = output_path + 'MWA_best_retrained_models/dm_curve_best_generator_model.h5'  
+                filename2 = self.output_path + 'MWA_best_retrained_models/dm_curve_best_generator_model.h5'  
                 g_model.save(filename2)
-                filename3 = output_path + 'MWA_best_retrained_models/dm_curve_best_discriminator_model.h5'
+                filename3 = self.output_path + 'MWA_best_retrained_models/dm_curve_best_discriminator_model.h5'
                 c_model.save(filename3)
                 model_accuracy = acc
 
@@ -222,10 +224,10 @@ class Train_SGAN_DM_Curve:
         else:
             print('Classifier Accuracy: %.3f%%' % (acc * 100))
             # save the generator model
-            filename2 = output_path + 'intermediate_models/dm_curve_g_model_epoch_%d.h5' %int(epoch_number)
+            filename2 = self.output_path + 'intermediate_models/dm_curve_g_model_epoch_%d.h5' %int(epoch_number)
             g_model.save(filename2)
             # save the classifier model
-            filename3 = output_path + 'intermediate_models/dm_curve_c_model_epoch_%d.h5' %int(epoch_number)
+            filename3 = self.output_path + 'intermediate_models/dm_curve_c_model_epoch_%d.h5' %int(epoch_number)
             c_model.save(filename3)
             print('>Saved: %s, and %s' % (filename2, filename3))
             return model_accuracy
@@ -304,7 +306,7 @@ class Train_SGAN_DM_Curve:
         plt.title('Batch size = {}, num epochs = {}'.format(self.batch_size, n_epochs))
         plt.legend(['validation', 'training'])
         plt.ylim(0, 1)
-        plt.savefig(output_path + 'training_logs/dm_curve.png')
+        plt.savefig(self.output_path + 'training_logs/dm_curve.png')
         plt.close(1)
 
 
@@ -315,7 +317,7 @@ class Train_SGAN_Pulse_Profile:
        Class to retrain SGAN using Pulse Profile Data.
 
                                                  """
-    def __init__(self, output_path, data, labels, validation_data, validation_labels, unlabelled_data, unlabelled_labels, batch_size, bin_size=64):
+    def __init__(self, output_path, data, labels, validation_data, validation_labels, unlabelled_data, unlabelled_labels, batch_size, lr_dis=0.001, lr_gan=0.001, bin_size=64):
         self.output_path = output_path
         self.data = data
         self.labels = labels
@@ -324,6 +326,8 @@ class Train_SGAN_Pulse_Profile:
         self.unlabelled_data = unlabelled_data
         self.unlabelled_labels = unlabelled_labels
         self.bin_size = bin_size
+        self.lr_dis = lr_dis
+        self.lr_gan = lr_gan
         self.batch_size = batch_size
 
     def Conv1DTranspose(self, input_tensor, filters, kernel_size, strides=2, padding='same'):
@@ -368,12 +372,12 @@ class Train_SGAN_Pulse_Profile:
         c_out_layer = Activation('softmax')(fe)
         ''' define and compile supervised discriminator model '''
         c_model = Model(in_image, c_out_layer)
-        c_model.compile(loss='sparse_categorical_crossentropy', optimizer=Adam(learning_rate=0.001, beta_1=0.5), metrics=['accuracy'])
+        c_model.compile(loss='sparse_categorical_crossentropy', optimizer=Adam(learning_rate=self.lr_dis, beta_1=0.5), metrics=['accuracy'])
         ''' unsupervised output '''
         d_out_layer = Lambda(self.custom_activation)(fe)
         ''' define and compile unsupervised discriminator model '''
         d_model = Model(in_image, d_out_layer)
-        d_model.compile(loss='binary_crossentropy', optimizer=Adam(learning_rate=0.001, beta_1=0.5))
+        d_model.compile(loss='binary_crossentropy', optimizer=Adam(learning_rate=self.lr_dis, beta_1=0.5))
         return d_model, c_model
 
 
@@ -411,7 +415,7 @@ class Train_SGAN_Pulse_Profile:
         # define gan model as taking noise and outputting a classification
         model = Model(g_model.input, gan_output)
         # compile model
-        opt = Adam(learning_rate=0.001, beta_1=0.5)
+        opt = Adam(learning_rate=self.lr_gan, beta_1=0.5)
         model.compile(loss='binary_crossentropy', optimizer=opt)
         return model
 
@@ -501,15 +505,15 @@ class Train_SGAN_Pulse_Profile:
         
         validation_X, validation_y = validation_dataset
         _, acc = c_model.evaluate(validation_X, validation_y, verbose=0)
-        with open(output_path + 'training_logs/model_performance_sgan_pulse_profile.txt', 'a') as f:
-            f.write(output_path + 'intermediate_models/pulse_profile_c_model_epoch_%d.h5' % int(epoch_number) + ',' + '%.3f' % (acc) + '\n')
+        with open(self.output_path + 'training_logs/model_performance_sgan_pulse_profile.txt', 'a') as f:
+            f.write(self.output_path + 'intermediate_models/pulse_profile_c_model_epoch_%d.h5' % int(epoch_number) + ',' + '%.3f' % (acc) + '\n')
 
         if save_best_model == True:
             if acc > model_accuracy:
                 print('Current Model has %.3f training accuracy which is better than previous best of %.3f. Will save it as as new best model.' % (acc * 100, model_accuracy * 100 ))
-                filename2 = output_path + 'MWA_best_retrained_models/pulse_profile_best_generator_model.h5'  
+                filename2 = self.output_path + 'MWA_best_retrained_models/pulse_profile_best_generator_model.h5'  
                 g_model.save(filename2)
-                filename3 = output_path + 'MWA_best_retrained_models/pulse_profile_best_discriminator_model.h5'
+                filename3 = self.output_path + 'MWA_best_retrained_models/pulse_profile_best_discriminator_model.h5'
                 c_model.save(filename3)
                 model_accuracy = acc
 
@@ -520,10 +524,10 @@ class Train_SGAN_Pulse_Profile:
         else:
             print('Classifier Accuracy: %.3f%%' % (acc * 100))
             # save the generator model
-            filename2 = output_path + 'intermediate_models/pulse_profile_g_model_epoch_%d.h5' %int(epoch_number)
+            filename2 = self.output_path + 'intermediate_models/pulse_profile_g_model_epoch_%d.h5' %int(epoch_number)
             g_model.save(filename2)
             # save the classifier model
-            filename3 = output_path + 'intermediate_models/pulse_profile_c_model_epoch_%d.h5' %int(epoch_number)
+            filename3 = self.output_path + 'intermediate_models/pulse_profile_c_model_epoch_%d.h5' %int(epoch_number)
             c_model.save(filename3)
             print('>Saved: %s, and %s' % (filename2, filename3))
             return model_accuracy, acc
@@ -598,7 +602,7 @@ class Train_SGAN_Pulse_Profile:
         plt.title('Batch size = {}, num epochs = {}'.format(self.batch_size, n_epochs))
         plt.legend(['validation', 'training'])
         plt.ylim(0, 1)
-        plt.savefig(output_path + 'training_logs/pulse_profile.png')
+        plt.savefig(self.output_path + 'training_logs/pulse_profile.png')
         plt.close(1)
 
 
@@ -610,7 +614,7 @@ class Train_SGAN_Freq_Phase:
        Class to retrain SGAN using Freq Phase Data.
 
                                                  """
-    def __init__(self, output_path, data, labels, validation_data, validation_labels, unlabelled_data, unlabelled_labels, batch_size, bin_size=48):
+    def __init__(self, output_path, data, labels, validation_data, validation_labels, unlabelled_data, unlabelled_labels, batch_size, lr_dis = 0.0002, lr_gan = 0.0002, bin_size=48):
         self.output_path = output_path
         self.data = data
         self.labels = labels
@@ -619,6 +623,8 @@ class Train_SGAN_Freq_Phase:
         self.unlabelled_data = unlabelled_data
         self.unlabelled_labels = unlabelled_labels
         self.bin_size = bin_size
+        self.lr_dis = lr_dis
+        self.lr_gan = lr_gan
         self.batch_size = batch_size
 
     def custom_activation(self, output):
@@ -651,12 +657,12 @@ class Train_SGAN_Freq_Phase:
         c_out_layer = Activation('softmax')(fe)
         ''' define and compile supervised discriminator model '''
         c_model = Model(in_image, c_out_layer)
-        c_model.compile(loss='sparse_categorical_crossentropy', optimizer=Adam(learning_rate=0.0002, beta_1=0.5), metrics=['accuracy'])
+        c_model.compile(loss='sparse_categorical_crossentropy', optimizer=Adam(learning_rate=self.lr_dis, beta_1=0.5), metrics=['accuracy'])
         ''' unsupervised output '''
         d_out_layer = Lambda(self.custom_activation)(fe)
         ''' define and compile unsupervised discriminator model '''
         d_model = Model(in_image, d_out_layer)
-        d_model.compile(loss='binary_crossentropy', optimizer=Adam(learning_rate=0.0002, beta_1=0.5))
+        d_model.compile(loss='binary_crossentropy', optimizer=Adam(learning_rate=self.lr_dis, beta_1=0.5))
         return d_model, c_model
 
 
@@ -695,7 +701,7 @@ class Train_SGAN_Freq_Phase:
         # define gan model as taking noise and outputting a classification
         model = Model(g_model.input, gan_output)
         # compile model
-        opt = Adam(learning_rate=0.0002, beta_1=0.5)
+        opt = Adam(learning_rate=self.lr_gan, beta_1=0.5)
         model.compile(loss='binary_crossentropy', optimizer=opt)
         return model
 
@@ -799,15 +805,15 @@ class Train_SGAN_Freq_Phase:
         
         validation_X, validation_y = validation_dataset
         _, acc = c_model.evaluate(validation_X, validation_y, verbose=0)
-        with open(output_path + 'training_logs/model_performance_sgan_freq_phase.txt', 'a') as f:
-            f.write(output_path + 'intermediate_models/freq_phase_c_model_epoch_%d.h5' % int(epoch_number) + ',' + '%.3f' % (acc) + '\n')
+        with open(self.output_path + 'training_logs/model_performance_sgan_freq_phase.txt', 'a') as f:
+            f.write(self.output_path + 'intermediate_models/freq_phase_c_model_epoch_%d.h5' % int(epoch_number) + ',' + '%.3f' % (acc) + '\n')
 
         if save_best_model == True:
             if acc > model_accuracy:
                 print('Current Model has %.3f training accuracy which is better than previous best of %.3f. Will save it as as new best model.' % (acc * 100, model_accuracy * 100 ))
-                filename2 = output_path + 'MWA_best_retrained_models/freq_phase_best_generator_model.h5'  
+                filename2 = self.output_path + 'MWA_best_retrained_models/freq_phase_best_generator_model.h5'  
                 g_model.save(filename2)
-                filename3 = output_path + 'MWA_best_retrained_models/freq_phase_best_discriminator_model.h5'
+                filename3 = self.output_path + 'MWA_best_retrained_models/freq_phase_best_discriminator_model.h5'
                 c_model.save(filename3)
                 model_accuracy = acc
 
@@ -818,10 +824,10 @@ class Train_SGAN_Freq_Phase:
         else:
             print('Classifier Accuracy: %.3f%%' % (acc * 100))
             # save the generator model
-            filename2 = output_path + 'intermediate_models/freq_phase_g_model_epoch_%d.h5' %int(epoch_number)
+            filename2 = self.output_path + 'intermediate_models/freq_phase_g_model_epoch_%d.h5' %int(epoch_number)
             g_model.save(filename2)
             # save the classifier model
-            filename3 = output_path + 'intermediate_models/freq_phase_c_model_epoch_%d.h5' %int(epoch_number)
+            filename3 = self.output_path + 'intermediate_models/freq_phase_c_model_epoch_%d.h5' %int(epoch_number)
             c_model.save(filename3)
             print('>Saved: %s, and %s' % (filename2, filename3))
             return model_accuracy, acc
@@ -896,7 +902,7 @@ class Train_SGAN_Freq_Phase:
         plt.title('Batch size = {}, num epochs = {}'.format(self.batch_size, n_epochs))
         plt.legend(['validation', 'training'])
         plt.ylim(0, 1)
-        plt.savefig(output_path + 'training_logs/freq_phase.png')
+        plt.savefig(self.output_path + 'training_logs/freq_phase.png')
         plt.close(1)
 
 class Train_SGAN_Time_Phase:
@@ -905,7 +911,7 @@ class Train_SGAN_Time_Phase:
        Class to retrain SGAN using Time-Phase Data.
 
                                                  """
-    def __init__(self, output_path, data, labels, validation_data, validation_labels, unlabelled_data, unlabelled_labels, batch_size, bin_size=48):
+    def __init__(self, output_path, data, labels, validation_data, validation_labels, unlabelled_data, unlabelled_labels, batch_size, lr_dis = 0.0002, lr_gan = 0.0002, bin_size=48):
         self.output_path = output_path
         self.data = data
         self.labels = labels
@@ -914,6 +920,8 @@ class Train_SGAN_Time_Phase:
         self.unlabelled_data = unlabelled_data
         self.unlabelled_labels = unlabelled_labels
         self.bin_size = bin_size
+        self.lr_dis = lr_dis
+        self.lr_gan = lr_gan
         self.batch_size = batch_size
 
     def custom_activation(self, output):
@@ -946,12 +954,12 @@ class Train_SGAN_Time_Phase:
         c_out_layer = Activation('softmax')(fe)
         ''' define and compile supervised discriminator model '''
         c_model = Model(in_image, c_out_layer)
-        c_model.compile(loss='sparse_categorical_crossentropy', optimizer=Adam(learning_rate=0.0002, beta_1=0.5), metrics=['accuracy'])
+        c_model.compile(loss='sparse_categorical_crossentropy', optimizer=Adam(learning_rate=self.lr_dis, beta_1=0.5), metrics=['accuracy'])
         ''' unsupervised output '''
         d_out_layer = Lambda(self.custom_activation)(fe)
         ''' define and compile unsupervised discriminator model '''
         d_model = Model(in_image, d_out_layer)
-        d_model.compile(loss='binary_crossentropy', optimizer=Adam(learning_rate=0.0002, beta_1=0.5))
+        d_model.compile(loss='binary_crossentropy', optimizer=Adam(learning_rate=self.lr_dis, beta_1=0.5))
         return d_model, c_model
 
 
@@ -990,7 +998,7 @@ class Train_SGAN_Time_Phase:
         # define gan model as taking noise and outputting a classification
         model = Model(g_model.input, gan_output)
         # compile model
-        opt = Adam(learning_rate=0.0002, beta_1=0.5)
+        opt = Adam(learning_rate=self.lr_gan, beta_1=0.5)
         model.compile(loss='binary_crossentropy', optimizer=opt)
         return model
 
@@ -1093,15 +1101,15 @@ class Train_SGAN_Time_Phase:
         
         validation_X, validation_y = validation_dataset
         _, acc = c_model.evaluate(validation_X, validation_y, verbose=0)
-        with open(output_path + 'training_logs/model_performance_sgan_time_phase.txt', 'a') as f:
-            f.write(output_path + 'intermediate_models/time_phase_c_model_epoch_%d.h5' % int(epoch_number) + ',' + '%.3f' % (acc) + '\n')
+        with open(self.output_path + 'training_logs/model_performance_sgan_time_phase.txt', 'a') as f:
+            f.write(self.output_path + 'intermediate_models/time_phase_c_model_epoch_%d.h5' % int(epoch_number) + ',' + '%.3f' % (acc) + '\n')
 
         if save_best_model == True:
             if acc > model_accuracy:
                 print('Current Model has %.3f training accuracy which is better than previous best of %.3f. Will save it as as new best model.' % (acc * 100, model_accuracy * 100 ))
-                filename2 = output_path + 'MWA_best_retrained_models/time_phase_best_generator_model.h5'  
+                filename2 = self.output_path + 'MWA_best_retrained_models/time_phase_best_generator_model.h5'  
                 g_model.save(filename2)
-                filename3 = output_path + 'MWA_best_retrained_models/time_phase_best_discriminator_model.h5'
+                filename3 = self.output_path + 'MWA_best_retrained_models/time_phase_best_discriminator_model.h5'
                 c_model.save(filename3)
                 model_accuracy = acc
 
@@ -1112,10 +1120,10 @@ class Train_SGAN_Time_Phase:
         else:
             print('Classifier Accuracy: %.3f%%' % (acc * 100))
             # save the generator model
-            filename2 = output_path + 'intermediate_models/time_phase_g_model_epoch_%d.h5' %int(epoch_number)
+            filename2 = self.output_path + 'intermediate_models/time_phase_g_model_epoch_%d.h5' %int(epoch_number)
             g_model.save(filename2)
             # save the classifier model
-            filename3 = output_path + 'intermediate_models/time_phase_c_model_epoch_%d.h5' %int(epoch_number)
+            filename3 = self.output_path + 'intermediate_models/time_phase_c_model_epoch_%d.h5' %int(epoch_number)
             c_model.save(filename3)
             print('>Saved: %s, and %s' % (filename2, filename3))
             return model_accuracy, acc
@@ -1188,6 +1196,6 @@ class Train_SGAN_Time_Phase:
         plt.title('Batch size = {}, num epochs = {}'.format(self.batch_size, n_epochs))
         plt.legend(['validation', 'training'])
         plt.ylim(0, 1)
-        plt.savefig(output_path + 'training_logs/time_phase.png')
+        plt.savefig(self.output_path + 'training_logs/time_phase.png')
         plt.close(1)
 
