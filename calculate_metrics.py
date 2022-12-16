@@ -11,7 +11,7 @@ import numpy as np
 
 #######################################################
 # Working directory where everything should be stored #
-base_dir = '/home/isaaccolleran/Documents/sgan/'      #
+base_dir = '/data/SGAN_Test_Data/'      #
 #######################################################
 
 ''' Step 1. Load the Validation Data '''

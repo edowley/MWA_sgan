@@ -105,10 +105,10 @@ freq_phase_combined_array = [np.load(filename[:-4] + '_freq_phase.npy') for file
 time_phase_combined_array = [np.load(filename[:-4] + '_time_phase.npy') for filename in training_files]
 
 # Reshape the data for the neural nets to read
-reshaped_time_phase = [np.reshape(f,(48,48,1)) for f in time_phase_combined_array]
-reshaped_freq_phase = [np.reshape(f,(48,48,1)) for f in freq_phase_combined_array]
-reshaped_pulse_profile = [np.reshape(f,(64,1)) for f in pulse_profile_combined_array]
 reshaped_dm_curve = [np.reshape(f,(60,1)) for f in dm_curve_combined_array]
+reshaped_pulse_profile = [np.reshape(f,(64,1)) for f in pulse_profile_combined_array]
+reshaped_freq_phase = [np.reshape(f,(48,48,1)) for f in freq_phase_combined_array]
+reshaped_time_phase = [np.reshape(f,(48,48,1)) for f in time_phase_combined_array]
 
 # Rescale the data between -1 and +1
 dm_curve_data = np.array([np.interp(a, (a.min(), a.max()), (-1, +1)) for a in reshaped_dm_curve])
@@ -125,10 +125,10 @@ pulse_profile_validation_combined_array = [np.load(filename[:-4] + '_pulse_profi
 freq_phase_validation_combined_array = [np.load(filename[:-4] + '_freq_phase.npy') for filename in validation_files]
 time_phase_validation_combined_array = [np.load(filename[:-4] + '_time_phase.npy') for filename in validation_files]
 
-reshaped_time_phase_validation = [np.reshape(f,(48,48,1)) for f in time_phase_validation_combined_array]
-reshaped_freq_phase_validation = [np.reshape(f,(48,48,1)) for f in freq_phase_validation_combined_array]
-reshaped_pulse_profile_validation = [np.reshape(f,(64,1)) for f in pulse_profile_validation_combined_array]
 reshaped_dm_curve_validation = [np.reshape(f,(60,1)) for f in dm_curve_validation_combined_array]
+reshaped_pulse_profile_validation = [np.reshape(f,(64,1)) for f in pulse_profile_validation_combined_array]
+reshaped_freq_phase_validation = [np.reshape(f,(48,48,1)) for f in freq_phase_validation_combined_array]
+reshaped_time_phase_validation = [np.reshape(f,(48,48,1)) for f in time_phase_validation_combined_array]
 
 dm_curve_validation_data = np.array([np.interp(a, (a.min(), a.max()), (-1, +1)) for a in reshaped_dm_curve_validation])
 pulse_profile_validation_data = np.array([np.interp(a, (a.min(), a.max()), (-1, +1)) for a in reshaped_pulse_profile_validation])
@@ -144,10 +144,10 @@ pulse_profile_unlabelled_combined_array = [np.load(filename[:-4] + '_pulse_profi
 freq_phase_unlabelled_combined_array = [np.load(filename[:-4] + '_freq_phase.npy') for filename in unlabelled_files]
 time_phase_unlabelled_combined_array = [np.load(filename[:-4] + '_time_phase.npy') for filename in unlabelled_files]
 
-reshaped_time_phase_unlabelled = [np.reshape(f,(48,48,1)) for f in time_phase_unlabelled_combined_array]
-reshaped_freq_phase_unlabelled = [np.reshape(f,(48,48,1)) for f in freq_phase_unlabelled_combined_array]
-reshaped_pulse_profile_unlabelled = [np.reshape(f,(64,1)) for f in pulse_profile_unlabelled_combined_array]
 reshaped_dm_curve_unlabelled = [np.reshape(f,(60,1)) for f in dm_curve_unlabelled_combined_array]
+reshaped_pulse_profile_unlabelled = [np.reshape(f,(64,1)) for f in pulse_profile_unlabelled_combined_array]
+reshaped_freq_phase_unlabelled = [np.reshape(f,(48,48,1)) for f in freq_phase_unlabelled_combined_array]
+reshaped_time_phase_unlabelled = [np.reshape(f,(48,48,1)) for f in time_phase_unlabelled_combined_array]
 
 dm_curve_unlabelled_data = np.array([np.interp(a, (a.min(), a.max()), (-1, +1)) for a in reshaped_dm_curve_unlabelled])
 pulse_profile_unlabelled_data = np.array([np.interp(a, (a.min(), a.max()), (-1, +1)) for a in reshaped_pulse_profile_unlabelled])
@@ -224,22 +224,18 @@ print(f'Time = {end-start:.3f} seconds')
 ''' Make predictions '''
 
 # Load the best of the models
-freq_phase_model = load_model(output_path + 'MWA_best_retrained_models/freq_phase_best_discriminator_model.h5')
-time_phase_model = load_model(output_path + 'MWA_best_retrained_models/time_phase_best_discriminator_model.h5')
 dm_curve_model = load_model(output_path + 'MWA_best_retrained_models/dm_curve_best_discriminator_model.h5')
 pulse_profile_model = load_model(output_path + 'MWA_best_retrained_models/pulse_profile_best_discriminator_model.h5')
+freq_phase_model = load_model(output_path + 'MWA_best_retrained_models/freq_phase_best_discriminator_model.h5')
+time_phase_model = load_model(output_path + 'MWA_best_retrained_models/time_phase_best_discriminator_model.h5')
 
 # Make predictions
-predictions_freq_phase = freq_phase_model.predict([freq_phase_data])
-predictions_time_phase = time_phase_model.predict([time_phase_data])
 predictions_dm_curve = dm_curve_model.predict([dm_curve_data])
 predictions_pulse_profile = pulse_profile_model.predict([pulse_profile_data])
+predictions_freq_phase = freq_phase_model.predict([freq_phase_data])
+predictions_time_phase = time_phase_model.predict([time_phase_data])
 
 # Process the predictions into numerical scores
-
-predictions_time_phase = np.rint(predictions_time_phase)
-predictions_time_phase = np.argmax(predictions_time_phase, axis=1)
-predictions_time_phase = np.reshape(predictions_time_phase, len(predictions_time_phase))
 
 predictions_dm_curve = np.rint(predictions_dm_curve)
 predictions_dm_curve = np.argmax(predictions_dm_curve, axis=1)
@@ -252,6 +248,11 @@ predictions_pulse_profile = np.reshape(predictions_pulse_profile, len(prediction
 predictions_freq_phase = np.rint(predictions_freq_phase)
 predictions_freq_phase = np.argmax(predictions_freq_phase, axis=1)
 predictions_freq_phase = np.reshape(predictions_freq_phase, len(predictions_freq_phase))
+
+predictions_time_phase = np.rint(predictions_time_phase)
+predictions_time_phase = np.argmax(predictions_time_phase, axis=1)
+predictions_time_phase = np.reshape(predictions_time_phase, len(predictions_time_phase))
+
 
 # Train the logistic regression
 model = LogisticRegression()
