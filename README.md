@@ -64,7 +64,15 @@ docker start [CONTAINER]
 docker exec -it [CONTAINER] bash
 ```
 
+**Version information**
+The provided Docker image uses:
+* Tensorflow 2.11.0-gpu
+* Ubuntu 20.04.5 LTS (from the Tensorflow image)
+* CUDA 12.0 (and also 11.2 and 11.0 from the Tensorflow image)
+* PRESTO 3.0.1 (soon to be updated to 4.0)
+
 ## SMART Database
 Candidates are currently sourced from https://apps.datacentral.org.au/smart/media/candidates/ using https://apps.datacentral.org.au/smart/candidates/?_export=csv as a reference.
 This database will soon be receiving updates to make it more compatible with machine learning applications, which will necessitate changes to the code. In particular, the first half of get_data.py.
 Also note that other scripts, e.g. retrain_sgan.py, refer to columns in the label csv files by their header names, which could be affected by these changes.
+

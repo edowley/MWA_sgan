@@ -6,7 +6,6 @@
 # 
 #       1. Takes as arguments the desired number of (labelled) pulsars to use,
 #          the number of unlabelled candidates to use, and the data directory path.
-#           - Currently asks the user to remove any existing files from the directory
 #       2. Downloads and reads a csv file of the SMART database as a pandas dataframe,
 #          and creates masks for pulsars, noise, RFI and unlabelled candidates.
 #           - Only candidates with an ID > 20000 are used (else the pfd is unavailable)
@@ -73,7 +72,7 @@ path_to_data = args.directory
 num_pulsars = args.num_pulsars
 num_unlabelled = args.num_unlabelled
 validation_ratio = arg.validation_ratio
-if (validation_ratio < 0.01) or (validation_ratio > 0.99):
+if (validation_ratio < 0.05) or (validation_ratio > 0.95):
     validation_ratio = DEFAULT_VALIDATION_RATIO
     print("Validation ratio was invalid, using default instead")
 
@@ -86,35 +85,17 @@ training_labels_file = labelled_data_path + 'training_labels.csv'
 validation_labels_file = validation_data_path + 'validation_labels.csv'
 unlabelled_labels_file = unlabelled_data_path + 'unlabelled_labels.csv'
 
-# Makes directories, or checks that they are empty if they already exist (temporary solution)
-def directory_setup(path):
-    if os.path.isdir(path):
-        with os.scandir(path) as it:
-            if any(it):
-                print("There appear to already be files in " + path)
-                sleep(1)
-                print("Please empty the 'labelled/', 'validation/' and 'unlabelled/' subdirectories before proceeding.")
-                sleep(2)
-                while True:
-                    cont = input("Continue? (y/n) ")
-                    if cont == 'y':
-                        break
-                    elif cont == 'n':
-                        sys.exit()
-    else:
-       os.makedirs(path)
-
 # Make the target directories, if they don't already exist
-# Also checks that the subdirectories are empty (temporary solution)
 os.makedirs(path_to_data, exist_ok=True)
-directory_setup(labelled_data_path)
-directory_setup(validation_data_path)
-directory_setup(unlabelled_data_path)
+os.makedirs(labelled_data_path, exist_ok=True)
+os.makedirs(validation_data_path, exist_ok=True)
+os.makedirs(unlabelled_data_path, exist_ok=True)
 
 # Download database.csv, if it doesn't already exist
 # Contains candidate IDs, pfd URLs, notes, ratings, etc.
 if not os.path.isfile(database_csv_path):
     urlretrieve(DATABASE_CSV_URL, database_csv_path)
+
 # Read "ID", "Pfd path", "Notes" and "Avg rating" columns, set "ID" as the index
 # Skips the first 6757 rows after the header (no pfd name / different name format)
 df = pd.read_csv(database_csv_path, header = 0, index_col = 'ID', usecols = ['ID', 'Pfd path', 'Notes', 'Avg rating'], \
@@ -156,7 +137,6 @@ num_noise = num_pulsars - num_RFI
 num_unlabelled = min(num_unlabelled, total_num_unlabelled)
 
 # Randomly sample the required number of each candidate type
-# (Apparently this is actually an in-place operation)
 all_pulsars = all_pulsars.sample(n = num_pulsars, random_state = 1)
 all_noise = all_noise.sample(n = num_noise, random_state = 1)
 all_RFI = all_RFI.sample(n = num_RFI, random_state = 1)
@@ -169,11 +149,11 @@ num_training_noise = floor(num_noise * (1 - VALIDATION_RATIO))
 num_training_RFI = floor(num_RFI * (1 - VALIDATION_RATIO))
 num_validation = num_pulsars + num_noise + num_RFI - num_training_pulsars - num_training_noise - num_training_RFI 
 
-print("Number of training pulsar candidates: " + str(num_training_pulsars))
-print("Number of training noise candidates: " + str(num_training_noise))
-print("Number of training RFI candidates: " + str(num_training_RFI))
-print("Number of unlabelled training candidates: " + str(num_unlabelled))
-print("Total number of validation candidates: " + str(num_validation))
+print(f"Number of training pulsar candidates: {num_training_pulsars}")
+print(f"Number of training noise candidates: {num_training_noise}")
+print(f"Number of training RFI candidates: {num_training_RFI}")
+print(f"Number of unlabelled training candidates: {num_unlabelled}")
+print(f"Total number of validation candidates: {num_validation}")
 
 # Construct the labelled training and validation sets
 # The unlabelled training set is "all_unlabelled" (no changes required)
@@ -192,7 +172,7 @@ def download_pfd(pfd_name):
         urlretrieve(DATABASE_URL + pfd_name, WORKING_LOCATION + pfd_name)
         return True
     except Exception as e:
-        print('Download failed: (' + pfd_name + ') ' + e)
+        print(f"Download failed: {pfd_name}, {e}")
         return False
 
 # Executes the downloads in parallel (threads)
@@ -204,7 +184,7 @@ def parallel_download(download_list):
         for result in executor.map(download_pfd, download_list):
             successes.append(result)
     total_time = time() - start
-    print('Download time: ' + str(total_time))
+    print(f"Download time: {total_time}")
     return successes
 
 # Extracts pfd files to numpy array files in the WORKING_LOCATION and deletes the pfd files
@@ -226,7 +206,7 @@ def extract_from_pfd(pfd_name):
             os.unlink(WORKING_LOCATION + pfd_name)
             return True
         except ValueError: 
-            print('Extraction failed: (' + pfd_name + ')')
+            print(f"Extraction failed: {pfd_name}")
              # If the extraction fails, delete the pfd anyway
             os.unlink(WORKING_LOCATION + pfd_name)
             return False
@@ -240,7 +220,7 @@ def parallel_extraction(extraction_list):
         for result in executor.map(extract_from_pfd, extraction_list):
             successes.append(result)
     total_time = time() - start
-    print('Extraction time: ' + str(total_time))
+    print(f"Extraction time: {total_time}")
     return successes
 
 
@@ -264,7 +244,6 @@ download_successes = parallel_download(validation_set['Pfd path'].values)
 validation_set = validation_set[download_successes]
 extraction_successes = parallel_extraction(validation_set['Pfd path'].values)
 validation_set = validation_set[extraction_successes]
-
 
 WORKING_LOCATION = unlabelled_data_path
 print("Starting work on the unlabelled training set...")

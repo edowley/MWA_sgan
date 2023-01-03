@@ -10,7 +10,7 @@ class NotADirectoryError(Exception):
     pass
 
 def dir_path(string):
-    if os.path.isdir(string):
+    if os.path.isdir(string) and string[-1] == "/":
         return string
     else:
         raise NotADirectoryError("Directory path is not valid.")
@@ -20,13 +20,16 @@ parser = argparse.ArgumentParser(description='Score pfd files based on the retra
 parser.add_argument('-i', '--input_path', help='Absolute path of test set directory', default="/data/SGAN_Test_Data/validation/")
 parser.add_argument('-l', '--label_file_name', help='Name of labels file in test set directory',  default="validation_labels.csv")
 parser.add_argument('-m', '--models', help='Absolute path of output directory for saving models',  default='/data/SGAN_Test_Data/models/')
+parser.add_argument('-r', '--regression', help='Give a regression score instead of a classification score',  default=False)
 
 args = parser.parse_args()
 path_to_data = args.input_path
 test_set_file = args.label_path
 path_to_models = args.models
+regression = args.regression
 
 dir_path(path_to_data)
+dir_path(path_to_models)
 
 # Read test set labels file
 test_set = pd.read_csv(path_to_data + test_set_file)
@@ -91,8 +94,13 @@ predictions_time_phase = np.reshape(predictions_time_phase, len(predictions_time
 
 stacked_predictions = np.stack((predictions_freq_phase, predictions_time_phase, predictions_dm_curve, predictions_pulse_profile), axis=1)
 stacked_predictions = np.reshape(stacked_predictions, (len(dm_curve_data),4))
-classified_results = logistic_model.predict(stacked_predictions) # if you want a classification score
-#classified_results = logistic_model.predict_proba(stacked_predictions)[:,1] # If you want a regression score
+
+if regression:
+    # Regression score
+    classified_results = logistic_model.predict_proba(stacked_predictions)[:,1]
+else:
+    # Classification score
+    classified_results = logistic_model.predict(stacked_predictions)
 
 # Calculate metrics
 f_score = f1_score(true_labels, classified_results, average='binary')
@@ -103,5 +111,7 @@ tn, fp, fn, tp = confusion_matrix(true_labels, classified_results).ravel()
 specificity = tn/(tn + fp)
 gmean = math.sqrt(specificity * recall)
 fpr = fp/(tn + fp)
-print('Results with SGAN Retraining')
-print('SGAN Model File:', 'MWA_best_retrained_models/sgan_retrained.pkl', 'Accuracy:', accuracy, 'F Score:', f_score, 'Precision:', precision, 'Recall:', recall, 'False Positive Rate:', fpr, 'Specificity:', specificity, 'G-Mean:', gmean)
+print('Results of retrained SGAN')
+print(f"SGAN Model File: {path_to_models}MWA_best_retrained_models/sgan_retrained.pkl")
+print(f"Accuracy: {accuracy}, F Score: {f_score}, Precision: {precision}, Recall: {recall}")
+print(f"False Positive Rate: {fpr}, Specificity: {specificity}, G-Mean: {gmean}")
