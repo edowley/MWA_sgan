@@ -163,13 +163,13 @@ print('Unlabelled data loaded')
 learning_rate_discriminator = [0.0008, 0.001, 0.0002, 0.0002] 
 learning_rate_gan = [0.003, 0.001, 0.0002, 0.0002]
 
-dm_curve_instance = Train_SGAN_DM_Curve(output_path, dm_curve_data, training_labels, dm_curve_validation_data, validation_labels, dm_curve_unlabelled_data, unlabelled_lables, batch_size \
+dm_curve_instance = Train_SGAN_DM_Curve(output_path, dm_curve_data, training_labels, dm_curve_validation_data, validation_labels, dm_curve_unlabelled_data, unlabelled_lables, batch_size, \
                     lr_dis = learning_rate_discriminator[0], lr_gan = learning_rate_gan[0])
-pulse_profile_instance = Train_SGAN_Pulse_Profile(output_path, pulse_profile_data, training_labels, pulse_profile_validation_data, validation_labels, pulse_profile_unlabelled_data, unlabelled_lables, batch_size \
+pulse_profile_instance = Train_SGAN_Pulse_Profile(output_path, pulse_profile_data, training_labels, pulse_profile_validation_data, validation_labels, pulse_profile_unlabelled_data, unlabelled_lables, batch_size, \
                     lr_dis = learning_rate_discriminator[1], lr_gan = learning_rate_gan[1])
-freq_phase_instance = Train_SGAN_Freq_Phase(output_path, freq_phase_data, training_labels, freq_phase_validation_data, validation_labels, freq_phase_unlabelled_data, unlabelled_lables, batch_size \
+freq_phase_instance = Train_SGAN_Freq_Phase(output_path, freq_phase_data, training_labels, freq_phase_validation_data, validation_labels, freq_phase_unlabelled_data, unlabelled_lables, batch_size, \
                     lr_dis = learning_rate_discriminator[2], lr_gan = learning_rate_gan[2])
-time_phase_instance = Train_SGAN_Time_Phase(output_path, time_phase_data, training_labels, time_phase_validation_data, validation_labels, time_phase_unlabelled_data, unlabelled_lables, batch_size \
+time_phase_instance = Train_SGAN_Time_Phase(output_path, time_phase_data, training_labels, time_phase_validation_data, validation_labels, time_phase_unlabelled_data, unlabelled_lables, batch_size, \
                     lr_dis = learning_rate_discriminator[3], lr_gan = learning_rate_gan[3])
 
 '''

@@ -46,6 +46,8 @@ Using the Docker image replaces the setup in step 1 of the previous sections.
 
 **Run Image with Test Data**
 
+# Section needs modification
+
 1. Create a volume called sgan_data and add the test data to it:
 ```
 docker container create --name dummy -v sgan_data:/root hello-world
@@ -68,7 +70,7 @@ docker exec -it [CONTAINER] bash
 The provided Docker image uses:
 * Tensorflow 2.11.0-gpu
 * Ubuntu 20.04.5 LTS (from the Tensorflow image)
-* CUDA 12.0 (and also 11.2 and 11.0 from the Tensorflow image)
+* CUDA 11.8 (compatible with driver versions < 525)
 * PRESTO 3.0.1 (soon to be updated to 4.0)
 
 ## SMART Database

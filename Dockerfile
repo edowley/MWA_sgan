@@ -27,22 +27,13 @@ RUN apt-get update -qq && \
     python3-pip \
     tcsh \
     wget && \
+    apt-get -y install cuda-11-8 && \    
     apt-get clean all && \
     rm -r /var/lib/apt/lists/*
 
-# Install a newer CUDA version (currently uses 12.0)
-RUN wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2004/x86_64/cuda-ubuntu2004.pin && \
-    mv cuda-ubuntu2004.pin /etc/apt/preferences.d/cuda-repository-pin-600 && \
-    wget https://developer.download.nvidia.com/compute/cuda/12.0.0/local_installers/cuda-repo-ubuntu2004-12-0-local_12.0.0-525.60.13-1_amd64.deb && \
-    dpkg -i cuda-repo-ubuntu2004-12-0-local_12.0.0-525.60.13-1_amd64.deb && \
-    cp /var/cuda-repo-ubuntu2004-12-0-local/cuda-*-keyring.gpg /usr/share/keyrings/ && \
-    apt-get update && \
-    apt-get -y install cuda-12.0
-
 # CUDA environment variables
-ENV PATH="/usr/local/cuda-12.0/bin/:${PATH}"
-ENV LD_LIBRARY_PATH="/usr/local/cuda-12.0/lib64/:${LD_LIBRARY_PATH}"
-
+ENV PATH="/usr/local/cuda-11.8/bin/:${PATH}"
+ENV LD_LIBRARY_PATH="/usr/local/cuda-11.8/lib64/:${LD_LIBRARY_PATH}"
 
 # Add pgplot environment variables
 ENV PGPLOT_DIR=/usr/local/pgplot
@@ -81,9 +72,9 @@ WORKDIR /home/soft
 
 # Install psrcat (uses v1.68)
 RUN wget https://www.atnf.csiro.au/research/pulsar/psrcat/downloads/psrcat_pkg.v1.68.tar.gz && \
-    gunzip psrcat_pkg.tar.gz && \
-    tar -xvf psrcat_pkg.tar && \
-    rm psrcat_pkg.tar && \
+    gunzip psrcat_pkg.v1.68.tar.gz && \
+    tar -xvf psrcat_pkg.v1.68.tar && \
+    rm psrcat_pkg.v1.68.tar && \
     cd psrcat_tar && \
     ls && \
     bash makeit && \
