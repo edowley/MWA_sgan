@@ -62,43 +62,40 @@ N_FEATURES = 4
 
 # Parse arguments
 parser = argparse.ArgumentParser(description='Download pfd files, label, and extract as numpy array files.')
-parser.add_argument('-d', '--directory', help='Directory location to store data',  default="/data/SGAN_Test_Data/")
+parser.add_argument('-c', '--candidates_path', help='Absolute path of output directory for candidate data', default='/data/SGAN_Test_Data/candidates/')
+parser.add_argument('-l', '--labels_path', help='Absolute path of output directory for label csv files',  default='/data/SGAN_Test_Data/labels/')
 parser.add_argument('-p', '--num_pulsars', help='Number of pulsars (and also non-pulsars) to use', default=DEFAULT_NUM_PULSARS, type=int)
 parser.add_argument('-u', '--num_unlabelled', help='Number of unlabelled candidates to use', default=DEFAULT_NUM_UNLABELLED, type=int)
 parser.add_argument('-v', '--validation_ratio', help='Proportion of labelled candidates to use in the validation set', default=DEFAULT_VALIDATION_RATIO, type=float)
 
 args = parser.parse_args()
-path_to_data = args.directory
+path_to_data = args.candidates_path
+path_to_labels = args.labels_path
 num_pulsars = args.num_pulsars
 num_unlabelled = args.num_unlabelled
-validation_ratio = arg.validation_ratio
+validation_ratio = args.validation_ratio
 if (validation_ratio < 0.05) or (validation_ratio > 0.95):
     validation_ratio = DEFAULT_VALIDATION_RATIO
     print("Validation ratio was invalid, using default instead")
 
-# Absolute paths to important files and subdirectories
-database_csv_path = path_to_data + 'database.csv'
-labelled_data_path = path_to_data + 'labelled/' 
-validation_data_path = path_to_data + 'validation/'
-unlabelled_data_path = path_to_data + 'unlabelled/'
-training_labels_file = labelled_data_path + 'training_labels.csv'
-validation_labels_file = validation_data_path + 'validation_labels.csv'
-unlabelled_labels_file = unlabelled_data_path + 'unlabelled_labels.csv'
+# Absolute paths to label csv files and the complete database csv file
+database_csv_file = path_to_labels + 'database.csv'
+training_labels_file = path_to_labels + 'training_labels.csv'
+validation_labels_file = path_to_labels + 'validation_labels.csv'
+unlabelled_labels_file = path_to_labels + 'unlabelled_labels.csv'
 
 # Make the target directories, if they don't already exist
 os.makedirs(path_to_data, exist_ok=True)
-os.makedirs(labelled_data_path, exist_ok=True)
-os.makedirs(validation_data_path, exist_ok=True)
-os.makedirs(unlabelled_data_path, exist_ok=True)
+os.makedirs(path_to_labels, exist_ok=True)
 
 # Download database.csv, if it doesn't already exist
 # Contains candidate IDs, pfd URLs, notes, ratings, etc.
-if not os.path.isfile(database_csv_path):
-    urlretrieve(DATABASE_CSV_URL, database_csv_path)
+if not os.path.isfile(database_csv_file):
+    urlretrieve(DATABASE_CSV_URL, database_csv_file)
 
 # Read "ID", "Pfd path", "Notes" and "Avg rating" columns, set "ID" as the index
 # Skips the first 6757 rows after the header (no pfd name / different name format)
-df = pd.read_csv(database_csv_path, header = 0, index_col = 'ID', usecols = ['ID', 'Pfd path', 'Notes', 'Avg rating'], \
+df = pd.read_csv(database_csv_file, header = 0, index_col = 'ID', usecols = ['ID', 'Pfd path', 'Notes', 'Avg rating'], \
                 dtype = {'ID': int, 'Pfd path': 'string', 'Notes': 'string', 'Avg rating': float}, \
                 skiprows = range(1, 6758), on_bad_lines = 'warn')
 
@@ -144,9 +141,9 @@ all_unlabelled = all_unlabelled.sample(n = num_unlabelled, random_state = 1)
 
 # Print the number of pulsar, RFI and noise candidates in the labelled training set,
 # plus the total number of candidates in the unlabelled and validation sets
-num_training_pulsars = floor(num_pulsars * (1 - VALIDATION_RATIO))
-num_training_noise = floor(num_noise * (1 - VALIDATION_RATIO))
-num_training_RFI = floor(num_RFI * (1 - VALIDATION_RATIO))
+num_training_pulsars = floor(num_pulsars * (1 - validation_ratio))
+num_training_noise = floor(num_noise * (1 - validation_ratio))
+num_training_RFI = floor(num_RFI * (1 - validation_ratio))
 num_validation = num_pulsars + num_noise + num_RFI - num_training_pulsars - num_training_noise - num_training_RFI 
 
 print(f"Number of training pulsar candidates: {num_training_pulsars}")
@@ -165,15 +162,19 @@ validation_set = pd.concat([all_pulsars.iloc[num_training_pulsars+1:], \
                              all_RFI.iloc[num_training_RFI+1:]])
 
 
-# Downloads pfd files from the DATABASE_URL to the current WORKING_LOCATION directory
+# Downloads pfd files from the DATABASE_URL to the candidates directory
 # Returns False and prints a message if the download fails, otherwise returns True
 def download_pfd(pfd_name):
-    try:
-        urlretrieve(DATABASE_URL + pfd_name, WORKING_LOCATION + pfd_name)
+    if len(glob(path_to_data + pfd_name[:-4] + '*')) == 0:
+        try:
+            urlretrieve(DATABASE_URL + pfd_name, path_to_data + pfd_name)
+            return True
+        except Exception as e:
+            print(f"Download failed: {pfd_name}, {e}")
+            return False
+    else:
+        # If the target pfd file or associated numpy files already exist, download is skipped
         return True
-    except Exception as e:
-        print(f"Download failed: {pfd_name}, {e}")
-        return False
 
 # Executes the downloads in parallel (threads)
 # Returns a mask for the successful downloads and prints the time taken
@@ -187,29 +188,32 @@ def parallel_download(download_list):
     print(f"Download time: {total_time}")
     return successes
 
-# Extracts pfd files to numpy array files in the WORKING_LOCATION and deletes the pfd files
+# Extracts pfd files to numpy array files in the candidates directory and deletes the pfd files
 # Returns False and prints a message if the extraction fails, otherwise returns True
 def extract_from_pfd(pfd_name):
-    if not len(glob(WORKING_LOCATION + pfd_name[:-4] + '*')) == N_FEATURES:
+    if not len(glob(path_to_data + pfd_name[:-4] + '*')) == N_FEATURES:
         try:
-            data_obj = pfddata(WORKING_LOCATION + pfd_name)
+            data_obj = pfddata(path_to_data + pfd_name)
             time_phase_data = data_obj.getdata(intervals=48)
             freq_phase_data = data_obj.getdata(subbands=48)
             dm_curve_data = data_obj.getdata(DMbins=60)
             profile_data = data_obj.getdata(phasebins=64)
 
-            np.save(WORKING_LOCATION + pfd_name[:-4] + '_time_phase.npy', time_phase_data)
-            np.save(WORKING_LOCATION + pfd_name[:-4] + '_freq_phase.npy', freq_phase_data)
-            np.save(WORKING_LOCATION + pfd_name[:-4] + '_dm_curve.npy', dm_curve_data)
-            np.save(WORKING_LOCATION + pfd_name[:-4] + '_pulse_profile.npy', profile_data)
+            np.save(path_to_data + pfd_name[:-4] + '_time_phase.npy', time_phase_data)
+            np.save(path_to_data + pfd_name[:-4] + '_freq_phase.npy', freq_phase_data)
+            np.save(path_to_data + pfd_name[:-4] + '_dm_curve.npy', dm_curve_data)
+            np.save(path_to_data + pfd_name[:-4] + '_pulse_profile.npy', profile_data)
 
-            os.unlink(WORKING_LOCATION + pfd_name)
+            os.unlink(path_to_data + pfd_name)
             return True
         except ValueError: 
             print(f"Extraction failed: {pfd_name}")
              # If the extraction fails, delete the pfd anyway
-            os.unlink(WORKING_LOCATION + pfd_name)
+            os.unlink(path_to_data + pfd_name)
             return False
+    else:
+        # If the numpy array files already exist, extraction is skipped
+        return True
 
 # Executes the extractions in parallel (threads)
 # Returns a mask for the successful extractions and prints the time taken
@@ -224,8 +228,6 @@ def parallel_extraction(extraction_list):
     return successes
 
 
-# Specify which set is currently being populated
-WORKING_LOCATION = labelled_data_path
 print("Starting work on the labelled training set...")
 # Download the pfd files and keep track of failed downloads
 download_successes = parallel_download(training_set['Pfd path'].values)
@@ -238,14 +240,12 @@ training_set = training_set[extraction_successes]
 
 # Repeat for the other two sets:
 
-WORKING_LOCATION = validation_data_path
 print("Starting work on the validation set...")
 download_successes = parallel_download(validation_set['Pfd path'].values)
 validation_set = validation_set[download_successes]
 extraction_successes = parallel_extraction(validation_set['Pfd path'].values)
 validation_set = validation_set[extraction_successes]
 
-WORKING_LOCATION = unlabelled_data_path
 print("Starting work on the unlabelled training set...")
 download_successes = parallel_download(all_unlabelled['Pfd path'].values)
 all_unlabelled = all_unlabelled[download_successes]

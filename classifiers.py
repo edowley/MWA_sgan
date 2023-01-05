@@ -205,7 +205,7 @@ class Train_SGAN_DM_Curve:
         
         validation_X, validation_y = validation_dataset
         _, acc = c_model.evaluate(validation_X, validation_y, verbose=0)
-        with open(self.output_path + 'training_logs/model_performance_sgan_dm_curve.txt', 'a') as f:
+        with open(self.output_path + 'training_logs/model_performance_sgan_dm_curve.txt', 'a+') as f:
             f.write(self.output_path + 'intermediate_models/dm_curve_c_model_epoch_%d.h5' % int(epoch_number) + ',' + '%.3f' % (acc) + '\n')
 
         if save_best_model == True:
@@ -505,7 +505,7 @@ class Train_SGAN_Pulse_Profile:
         
         validation_X, validation_y = validation_dataset
         _, acc = c_model.evaluate(validation_X, validation_y, verbose=0)
-        with open(self.output_path + 'training_logs/model_performance_sgan_pulse_profile.txt', 'a') as f:
+        with open(self.output_path + 'training_logs/model_performance_sgan_pulse_profile.txt', 'a+') as f:
             f.write(self.output_path + 'intermediate_models/pulse_profile_c_model_epoch_%d.h5' % int(epoch_number) + ',' + '%.3f' % (acc) + '\n')
 
         if save_best_model == True:
@@ -805,7 +805,7 @@ class Train_SGAN_Freq_Phase:
         
         validation_X, validation_y = validation_dataset
         _, acc = c_model.evaluate(validation_X, validation_y, verbose=0)
-        with open(self.output_path + 'training_logs/model_performance_sgan_freq_phase.txt', 'a') as f:
+        with open(self.output_path + 'training_logs/model_performance_sgan_freq_phase.txt', 'a+') as f:
             f.write(self.output_path + 'intermediate_models/freq_phase_c_model_epoch_%d.h5' % int(epoch_number) + ',' + '%.3f' % (acc) + '\n')
 
         if save_best_model == True:
@@ -1101,7 +1101,7 @@ class Train_SGAN_Time_Phase:
         
         validation_X, validation_y = validation_dataset
         _, acc = c_model.evaluate(validation_X, validation_y, verbose=0)
-        with open(self.output_path + 'training_logs/model_performance_sgan_time_phase.txt', 'a') as f:
+        with open(self.output_path + 'training_logs/model_performance_sgan_time_phase.txt', 'a+') as f:
             f.write(self.output_path + 'intermediate_models/time_phase_c_model_epoch_%d.h5' % int(epoch_number) + ',' + '%.3f' % (acc) + '\n')
 
         if save_best_model == True:

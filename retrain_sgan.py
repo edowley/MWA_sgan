@@ -47,28 +47,34 @@ def dir_path(string):
 '''
 # Parse arguments
 parser = argparse.ArgumentParser(description='Re-train SGAN machine learning model using files sourced by get_data.py')
-parser.add_argument('-i', '--input_path', help='Absolute path of input directory for candidate data', default='/data/SGAN_Test_Data/')
-parser.add_argument('-m', '--models', help='Absolute path of output directory for saving models',  default='/data/SGAN_Test_Data/models/')
+parser.add_argument('-c', '--candidates_path', help='Absolute path of directory containing candidate data', default='/data/SGAN_Test_Data/candidates/')
+parser.add_argument('-l', '--labels_path', help='Absolute path of directory containing label csv files',  default='/data/SGAN_Test_Data/labels/')
+parser.add_argument('-m', '--models_path', help='Absolute path of output directory for saved models',  default='/data/SGAN_Test_Data/models/')
 parser.add_argument('-b', '--batch_size', help='No. of pfd files that will be read in one batch', default='16', type=int)
 parser.add_argument('-e', '--num_epochs', help='No. of epochs to train', default='20', type=int)
 
 args = parser.parse_args()
-path_to_data = args.input_path
-output_path = args.models
+path_to_data = args.candidates_path
+path_to_labels = args.labels_path
+path_to_models = args.models_path
 batch_size = args.batch_size
 num_epochs = args.num_epochs
 
+# Absolute paths to label csv files
+training_labels_file = path_to_labels + 'training_labels.csv'
+validation_labels_file = path_to_labels + 'validation_labels.csv'
+unlabelled_labels_file = path_to_labels + 'unlabelled_labels.csv'
+
 # Check that the specified input and output directories exist
 dir_path(path_to_data)
-os.makedirs(output_path, exist_ok=True)
+dir_path(path_to_labels)
+os.makedirs(path_to_models, exist_ok=True)
 
-# Absolute paths to important files and subdirectories
-labelled_data_path = path_to_data + 'labelled/' 
-validation_data_path = path_to_data + 'validation/'
-unlabelled_data_path = path_to_data + 'unlabelled/'
-training_labels_file = labelled_data_path + 'training_labels.csv'
-validation_labels_file = validation_data_path + 'validation_labels.csv'
-unlabelled_labels_file = unlabelled_data_path + 'unlabelled_labels.csv'
+# Check that the output subdirectories exist
+os.makedirs(path_to_models + 'training_logs/', exist_ok=True)
+os.makedirs(path_to_models + 'intermediate_models/', exist_ok=True)
+os.makedirs(path_to_models + 'MWA_best_retrained_models/', exist_ok=True)
+
 
 # Read the label files as pandas dataframes
 training_labels = pd.read_csv(training_labels_file, header = 0, index_col = 0, \
@@ -80,9 +86,9 @@ unlabelled_labels = pd.read_csv(unlabelled_labels_file, header = 0, index_col = 
 
 # Extract the absolute paths of the candidate pfd files
 # (The pfd files no longer exist, but the numpy array files have similar names)
-training_files = labelled_data_path + training_labels['Pfd path'].to_numpy()
-validation_files = validation_data_path + validation_labels['Pfd path'].to_numpy()
-unlabelled_files = unlabelled_data_path + unlabelled_labels['Pfd path'].to_numpy()
+training_files = path_to_data + training_labels['Pfd path'].to_numpy()
+validation_files = path_to_data + validation_labels['Pfd path'].to_numpy()
+unlabelled_files = path_to_data + unlabelled_labels['Pfd path'].to_numpy()
 
 # Extract the labels, creating labels of -1 for the unlabelled candidates
 training_labels = training_labels['Classification'].to_numpy()
@@ -163,21 +169,21 @@ print('Unlabelled data loaded')
 learning_rate_discriminator = [0.0008, 0.001, 0.0002, 0.0002] 
 learning_rate_gan = [0.003, 0.001, 0.0002, 0.0002]
 
-dm_curve_instance = Train_SGAN_DM_Curve(output_path, dm_curve_data, training_labels, dm_curve_validation_data, validation_labels, dm_curve_unlabelled_data, unlabelled_lables, batch_size, \
+dm_curve_instance = Train_SGAN_DM_Curve(path_to_models, dm_curve_data, training_labels, dm_curve_validation_data, validation_labels, dm_curve_unlabelled_data, unlabelled_lables, batch_size, \
                     lr_dis = learning_rate_discriminator[0], lr_gan = learning_rate_gan[0])
-pulse_profile_instance = Train_SGAN_Pulse_Profile(output_path, pulse_profile_data, training_labels, pulse_profile_validation_data, validation_labels, pulse_profile_unlabelled_data, unlabelled_lables, batch_size, \
+pulse_profile_instance = Train_SGAN_Pulse_Profile(path_to_models, pulse_profile_data, training_labels, pulse_profile_validation_data, validation_labels, pulse_profile_unlabelled_data, unlabelled_lables, batch_size, \
                     lr_dis = learning_rate_discriminator[1], lr_gan = learning_rate_gan[1])
-freq_phase_instance = Train_SGAN_Freq_Phase(output_path, freq_phase_data, training_labels, freq_phase_validation_data, validation_labels, freq_phase_unlabelled_data, unlabelled_lables, batch_size, \
+freq_phase_instance = Train_SGAN_Freq_Phase(path_to_models, freq_phase_data, training_labels, freq_phase_validation_data, validation_labels, freq_phase_unlabelled_data, unlabelled_lables, batch_size, \
                     lr_dis = learning_rate_discriminator[2], lr_gan = learning_rate_gan[2])
-time_phase_instance = Train_SGAN_Time_Phase(output_path, time_phase_data, training_labels, time_phase_validation_data, validation_labels, time_phase_unlabelled_data, unlabelled_lables, batch_size, \
+time_phase_instance = Train_SGAN_Time_Phase(path_to_models, time_phase_data, training_labels, time_phase_validation_data, validation_labels, time_phase_unlabelled_data, unlabelled_lables, batch_size, \
                     lr_dis = learning_rate_discriminator[3], lr_gan = learning_rate_gan[3])
 
 '''
 # Use default learning rates
-dm_curve_instance = Train_SGAN_DM_Curve(output_path, dm_curve_data, training_labels, dm_curve_validation_data, validation_labels, dm_curve_unlabelled_data, unlabelled_lables, batch_size)
-pulse_profile_instance = Train_SGAN_Pulse_Profile(output_path, pulse_profile_data, training_labels, pulse_profile_validation_data, validation_labels, pulse_profile_unlabelled_data, unlabelled_lables, batch_size)
-freq_phase_instance = Train_SGAN_Freq_Phase(output_path, freq_phase_data, training_labels, freq_phase_validation_data, validation_labels, freq_phase_unlabelled_data, unlabelled_lables, batch_size)
-time_phase_instance = Train_SGAN_Time_Phase(output_path, time_phase_data, training_labels, time_phase_validation_data, validation_labels, time_phase_unlabelled_data, unlabelled_lables, batch_size)
+dm_curve_instance = Train_SGAN_DM_Curve(path_to_models, dm_curve_data, training_labels, dm_curve_validation_data, validation_labels, dm_curve_unlabelled_data, unlabelled_lables, batch_size)
+pulse_profile_instance = Train_SGAN_Pulse_Profile(path_to_models, pulse_profile_data, training_labels, pulse_profile_validation_data, validation_labels, pulse_profile_unlabelled_data, unlabelled_lables, batch_size)
+freq_phase_instance = Train_SGAN_Freq_Phase(path_to_models, freq_phase_data, training_labels, freq_phase_validation_data, validation_labels, freq_phase_unlabelled_data, unlabelled_lables, batch_size)
+time_phase_instance = Train_SGAN_Time_Phase(path_to_models, time_phase_data, training_labels, time_phase_validation_data, validation_labels, time_phase_unlabelled_data, unlabelled_lables, batch_size)
 '''
 
 # Train the DM Curve models
@@ -224,10 +230,10 @@ print(f'Time = {end-start:.3f} seconds')
 ''' Make predictions '''
 
 # Load the best of the models
-dm_curve_model = load_model(output_path + 'MWA_best_retrained_models/dm_curve_best_discriminator_model.h5')
-pulse_profile_model = load_model(output_path + 'MWA_best_retrained_models/pulse_profile_best_discriminator_model.h5')
-freq_phase_model = load_model(output_path + 'MWA_best_retrained_models/freq_phase_best_discriminator_model.h5')
-time_phase_model = load_model(output_path + 'MWA_best_retrained_models/time_phase_best_discriminator_model.h5')
+dm_curve_model = load_model(path_to_models + 'MWA_best_retrained_models/dm_curve_best_discriminator_model.h5')
+pulse_profile_model = load_model(path_to_models + 'MWA_best_retrained_models/pulse_profile_best_discriminator_model.h5')
+freq_phase_model = load_model(path_to_models + 'MWA_best_retrained_models/freq_phase_best_discriminator_model.h5')
+time_phase_model = load_model(path_to_models + 'MWA_best_retrained_models/time_phase_best_discriminator_model.h5')
 
 # Make predictions
 predictions_dm_curve = dm_curve_model.predict([dm_curve_data])
@@ -259,8 +265,8 @@ model = LogisticRegression()
 stacked_results = np.stack((predictions_freq_phase, predictions_time_phase, predictions_dm_curve, predictions_pulse_profile), axis=1)
 stacked_results = np.reshape(stacked_results, (len(predictions_freq_phase), 4))
 model.fit(stacked_results, training_labels)
-pickle.dump(model, open(output_path + 'MWA_best_retrained_models/sgan_retrained.pkl', 'wb'))
+pickle.dump(model, open(path_to_models + 'MWA_best_retrained_models/sgan_retrained.pkl', 'wb'))
 
-# logistic_model = pickle.load(open(output_path + 'MWA_best_retrained_models/sgan_retrained.pkl', 'rb'))
+# logistic_model = pickle.load(open(path_to_models + 'MWA_best_retrained_models/sgan_retrained.pkl', 'rb'))
 
 print("All done!")

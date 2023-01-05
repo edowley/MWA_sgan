@@ -1,4 +1,4 @@
-import argparse, errno, glob, os, pickle, sys, time
+import argparse, errno, glob, math, os, pickle, sys, time
 from keras.utils import to_categorical
 from keras.models import load_model
 import numpy as np
@@ -17,22 +17,24 @@ def dir_path(string):
 
 
 parser = argparse.ArgumentParser(description='Score pfd files based on the retrained SGAN model and calculate performance against a test-set')
-parser.add_argument('-i', '--input_path', help='Absolute path of test set directory', default="/data/SGAN_Test_Data/validation/")
-parser.add_argument('-l', '--label_file_name', help='Name of labels file in test set directory',  default="validation_labels.csv")
-parser.add_argument('-m', '--models', help='Absolute path of output directory for saving models',  default='/data/SGAN_Test_Data/models/')
+parser.add_argument('-c', '--candidates_path', help='Absolute path of directory containing candidate data', default='/data/SGAN_Test_Data/candidates/')
+parser.add_argument('-l', '--label_file_name', help='Absolute path of the label csv file for the test set',  default='/data/SGAN_Test_Data/labels/validation_labels.csv')
+parser.add_argument('-m', '--models_path', help='Absolute path of directory containing models',  default='/data/SGAN_Test_Data/models/')
 parser.add_argument('-r', '--regression', help='Give a regression score instead of a classification score',  default=False)
 
 args = parser.parse_args()
-path_to_data = args.input_path
-test_set_file = args.label_path
-path_to_models = args.models
+path_to_data = args.candidates_path
+label_file_name = args.label_file_name
+path_to_models = args.models_path
 regression = args.regression
 
 dir_path(path_to_data)
+os.path.isfile(label_file_name)
 dir_path(path_to_models)
 
 # Read test set labels file
-test_set = pd.read_csv(path_to_data + test_set_file)
+test_set = pd.read_csv(label_file_name, header = 0, index_col = 0, \
+                dtype = {'ID': int, 'Pfd path': 'string', 'Classification': int})
 
 candidate_files = path_to_data + test_set['Pfd path'].to_numpy()
 true_labels = test_set['Classification'].to_numpy()
