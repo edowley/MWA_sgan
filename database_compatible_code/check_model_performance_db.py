@@ -18,7 +18,7 @@ def dir_path(string):
 
 parser = argparse.ArgumentParser(description='Score pfd files based on the retrained SGAN model and calculate performance against a test-set')
 parser.add_argument('-c', '--candidates_path', help='Absolute path of directory containing candidate data', default='/data/SGAN_Test_Data/candidates/')
-parser.add_argument('-l', '--label_file_name', help='Absolute path of the label csv file for the test set',  default='/data/SGAN_Test_Data/labels/validation_labels.csv')
+parser.add_argument('-l', '--label_file_name', help='Absolute path of the label csv file for the test set',  default='/data/SGAN_Test_Data/labels/true_labels.csv')
 parser.add_argument('-m', '--models_path', help='Absolute path of directory containing models',  default='/data/SGAN_Test_Data/models/')
 parser.add_argument('-r', '--regression', help='Give a regression score instead of a classification score',  default=False)
 
