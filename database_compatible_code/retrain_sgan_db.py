@@ -1,5 +1,7 @@
 ###############################################################################
-# 
+#
+# Database-compatible version (WIP). 
+#
 # This file contains code that will retrain the SGAN using the labelled, unlabelled,
 # and validation sets constructed by get_data.py.
 # 

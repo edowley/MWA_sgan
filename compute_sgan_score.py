@@ -1,8 +1,6 @@
 ###############################################################################
 # 
-# This file contains code that will retrain the SGAN using the labelled, unlabelled,
-# and validation sets constructed by get_data.py. It assumes that the input directory
-# is the same as the directory used by get_data.py.
+# This file contains code that will use existing models to classify candidates.
 # 
 #       1. This description,
 #          has not been written yet.

@@ -1,3 +1,16 @@
+###############################################################################
+#
+# Database-compatible version (WIP). 
+#
+# This file contains code that will measure the performance of models against
+# a labelled validation set.
+# 
+#       1. This description,
+#          has not been written yet.
+#           - Come back later
+# 
+###############################################################################
+
 import argparse, errno, glob, math, os, pickle, sys, time
 from keras.utils import to_categorical
 from keras.models import load_model

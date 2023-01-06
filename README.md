@@ -73,6 +73,10 @@ The provided Docker image uses:
 * CUDA 11.8 (compatible with driver versions < 525)
 * PRESTO 3.0.1 (soon to be updated to 4.0)
 
+Potential compatibility issues:
+The tensorflow:2.11.0-gpu image uses Ubuntu and CUDA versions that are about two years out of date, so the Dockerfile contains instructions to install CUDA 11.8 as well. This is necessary to support driver versions > 470. In the future, CUDA 11.8 will become similarly out-dated, and the Dockerfile will have to be updated (upgrading to a new tensorflow base image will likely not be sufficient). There is no CUDA 12.0 package available for Ubuntu 20.04 currently, but one may be available by the time this becomes an issue.
+It is also necessary to have an appropriate version of nvidia-container-runtime installed locally, as mentioned at the beginning of the Docker notes.
+
 ## SMART Database
 Candidates are currently sourced from https://apps.datacentral.org.au/smart/media/candidates/ using https://apps.datacentral.org.au/smart/candidates/?_export=csv as a reference.
 This database will soon be receiving updates to make it more compatible with machine learning applications, which will necessitate changes to the code. In particular, the first half of get_data.py.

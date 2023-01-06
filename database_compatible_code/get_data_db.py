@@ -1,5 +1,7 @@
 ###############################################################################
-# 
+#
+# Database-compatible version (WIP). 
+#
 # This file contains code that will select appropriate training and validation sets,
 # download and process the required files, and output csv files containing the
 # candidate IDs, file names, and labels (if applicable) for each set
