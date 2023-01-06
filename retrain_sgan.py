@@ -52,6 +52,7 @@ parser.add_argument('-l', '--labels_path', help='Absolute path of directory cont
 parser.add_argument('-m', '--models_path', help='Absolute path of output directory for saved models',  default='/data/SGAN_Test_Data/models/')
 parser.add_argument('-b', '--batch_size', help='No. of pfd files that will be read in one batch', default='16', type=int)
 parser.add_argument('-e', '--num_epochs', help='No. of epochs to train', default='20', type=int)
+parser.add_argument('-x', '--set_ID', help='Identifier appended to the label file names for these sets', default="", type=str)
 
 args = parser.parse_args()
 path_to_data = args.candidates_path
@@ -59,11 +60,12 @@ path_to_labels = args.labels_path
 path_to_models = args.models_path
 batch_size = args.batch_size
 num_epochs = args.num_epochs
+set_ID = args.set_ID
 
 # Absolute paths to label csv files
-training_labels_file = path_to_labels + 'training_labels.csv'
-validation_labels_file = path_to_labels + 'validation_labels.csv'
-unlabelled_labels_file = path_to_labels + 'unlabelled_labels.csv'
+training_labels_file = f"{path_to_labels}training_labels{set_ID}.csv"
+validation_labels_file = f"{path_to_labels}validation_labels{set_ID}.csv"
+unlabelled_labels_file = f"{path_to_labels}unlabelled_labels{set_ID}.csv"
 
 # Check that the specified input and output directories exist
 dir_path(path_to_data)
@@ -104,7 +106,7 @@ for label, count in zip(labels, counts):
 
 ''' Prepare the labelled training data for use by the neural nets '''
 
-# Load data (using [:-4] to remove the '.pfd' file extension)
+# Load data (using [:-4] to remove the '.pfd' file extension from the name)
 dm_curve_combined_array = [np.load(filename[:-4] + '_dm_curve.npy') for filename in training_files]
 pulse_profile_combined_array = [np.load(filename[:-4] + '_pulse_profile.npy') for filename in training_files]
 freq_phase_combined_array = [np.load(filename[:-4] + '_freq_phase.npy') for filename in training_files]

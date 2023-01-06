@@ -25,14 +25,14 @@
 #          NB: The random seed is currently fixed for testing purposes.
 #       4. Each set has a dateframe which holds the candidate IDs and pfd file names,
 #          plus labels if applicable (1 for pulsar, 0 for non-pulsar).
-#       5. The selected candidate pfd files are downloaded to the 'labelled/',
-#          'unlabelled/' or 'validation/' subdirectories, their contents extracted to
-#          numpy array files, and then deleted.
+#       5. The selected candidate pfd files are downloaded to the designated candidates
+#          directory, their contents extracted to numpy array files, and then deleted.
 #           - Downloads are done in parallel, currently CPU only, failures are tracked
 #           - Ditto for extractions
 #           - The sets are processed one at a time, to avoid cluttering with pfd files
+#           - If a candidate's files are already present, download/extraction is skipped
 #          NB: It should be possible to speed up the extraction phase more.
-#       6. Finally, the dataframes for each set are written to csv files for later use.
+#       6. The dataframes for each set are written to csv files in the designated labels directory.
 #
 ###############################################################################
 
@@ -67,6 +67,7 @@ parser.add_argument('-l', '--labels_path', help='Absolute path of output directo
 parser.add_argument('-p', '--num_pulsars', help='Number of pulsars (and also non-pulsars) to use', default=DEFAULT_NUM_PULSARS, type=int)
 parser.add_argument('-u', '--num_unlabelled', help='Number of unlabelled candidates to use', default=DEFAULT_NUM_UNLABELLED, type=int)
 parser.add_argument('-v', '--validation_ratio', help='Proportion of labelled candidates to use in the validation set', default=DEFAULT_VALIDATION_RATIO, type=float)
+parser.add_argument('-x', '--set_ID', help='Identifier to append to the label file names for these sets', default="", type=str)
 
 args = parser.parse_args()
 path_to_data = args.candidates_path
@@ -74,15 +75,13 @@ path_to_labels = args.labels_path
 num_pulsars = args.num_pulsars
 num_unlabelled = args.num_unlabelled
 validation_ratio = args.validation_ratio
-if (validation_ratio < 0.05) or (validation_ratio > 0.95):
-    validation_ratio = DEFAULT_VALIDATION_RATIO
-    print("Validation ratio was invalid, using default instead")
+set_ID = args.set_ID
 
 # Absolute paths to label csv files and the complete database csv file
 database_csv_file = path_to_labels + 'database.csv'
-training_labels_file = path_to_labels + 'training_labels.csv'
-validation_labels_file = path_to_labels + 'validation_labels.csv'
-unlabelled_labels_file = path_to_labels + 'unlabelled_labels.csv'
+training_labels_file = f"{path_to_labels}training_labels{set_ID}.csv"
+validation_labels_file = f"{path_to_labels}validation_labels{set_ID}.csv"
+unlabelled_labels_file = f"{path_to_labels}unlabelled_labels{set_ID}.csv"
 
 # Make the target directories, if they don't already exist
 os.makedirs(path_to_data, exist_ok=True)

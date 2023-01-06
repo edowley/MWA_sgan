@@ -49,7 +49,7 @@ time_phase_model = load_model(path_to_models + 'MWA_best_retrained_models/time_p
 
 logistic_model = pickle.load(open(path_to_models + 'MWA_best_retrained_models/sgan_retrained.pkl', 'rb'))
 
-# Load data (using [:-4] to remove the '.pfd' file extension)
+# Load data (using [:-4] to remove the '.pfd' file extension from the name)
 dm_curve_combined_array = [np.load(filename[:-4] + '_dm_curve.npy') for filename in candidate_files]
 pulse_profile_combined_array = [np.load(filename[:-4] + '_pulse_profile.npy') for filename in candidate_files]
 freq_phase_combined_array = [np.load(filename[:-4] + '_freq_phase.npy') for filename in candidate_files]
