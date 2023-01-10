@@ -41,13 +41,15 @@
 import argparse
 import concurrent.futures as cf
 from glob import glob
+import json
 from math import floor
 from multiprocessing import cpu_count
 import numpy as np
 import os
 import pandas as pd
+import requests
 import sys
-from time import time, sleep
+from time import time
 from ubc_AI.training import pfddata
 from urllib.request import urlretrieve
 
@@ -79,79 +81,112 @@ num_unlabelled = args.num_unlabelled
 validation_ratio = args.validation_ratio
 set_ID = args.set_ID
 
-# Absolute paths to label csv files and the complete database csv file
-database_csv_file = path_to_labels + 'database.csv'
-training_labels_file = f"{path_to_labels}training_labels{set_ID}.csv"
-validation_labels_file = f"{path_to_labels}validation_labels{set_ID}.csv"
-unlabelled_labels_file = f"{path_to_labels}unlabelled_labels{set_ID}.csv"
 
-# Make the target directories, if they don't already exist
-os.makedirs(path_to_data, exist_ok=True)
-os.makedirs(path_to_labels, exist_ok=True)
+# Database stuff
+class TokenAuth(requests.auth.AuthBase):
+    def __init__(self, token):
+        self.token = token
 
-# Download database.csv, if it doesn't already exist
-# Contains candidate IDs, pfd URLs, notes, ratings, etc.
-if not os.path.isfile(database_csv_file):
-    urlretrieve(DATABASE_CSV_URL, database_csv_file)
+    def __call__(self, r):
+        r.headers['Authorization'] = "Token {}".format(self.token)
+        return r
 
-# Read "ID", "Pfd path", "Notes" and "Avg rating" columns, set "ID" as the index
-# Skips the first 6757 rows after the header (no pfd name / different name format)
-df = pd.read_csv(database_csv_file, header = 0, index_col = 'ID', usecols = ['ID', 'Pfd path', 'Notes', 'Avg rating'], \
-                dtype = {'ID': int, 'Pfd path': 'string', 'Notes': 'string', 'Avg rating': float}, \
-                skiprows = range(1, 6758), on_bad_lines = 'warn')
+my_session = requests.session()
+my_session.auth = TokenAuth("fagkjfasbnlvasfdfwjf783YDF")
 
+def get_dataframe(url='http://localhost:8000/api/candidates/', param=None):
+    try:
+        cands = my_session.get(url, params=param)
+        cands_for_status()
+    except requests.exceptions.HTTPError as err:
+        print(err)
+    return pd.read_json(cands.json)
 
-# Create masks for pulsars, noise, RFI and unlabelled candidates in the dataframe
-# Only considers pulsars with an ID above 20000 (so the pfd is available)
-# Would be nice if there was a boolean column for RFI, rather than relying on notes
-labelled_mask = (20000 <= df.index) & ~np.isnan(df['Avg rating'].to_numpy(dtype = float))
-pulsar_mask = (df['Avg rating'].to_numpy(dtype = float) >= 4) & labelled_mask
-noise_mask = (df['Avg rating'].to_numpy(dtype = float) <= 2) & (np.char.find(df['Notes'].to_numpy(dtype = 'U'), 'RFI') == -1) & labelled_mask
-RFI_mask = (df['Avg rating'].to_numpy(dtype = float) <= 2) & (np.char.find(df['Notes'].to_numpy(dtype = 'U'), 'RFI') != -1) & labelled_mask
-unlabelled_mask = (20000 <= df.index) & np.isnan(df['Avg rating'].to_numpy(dtype = float))
+# Get pandas dataframe of pulsar candidates (avg rating >= 4, no RFI)
+url = 'http://localhost:8000/api/candidates/avg_rating__gte=4'
+param = {'rfi': False}
+all_pulsars = get_dataframe(url, param)
 
-# Dataframes for each candidate type, containing the pfd name and candidate ID (index)
-all_pulsars = df[pulsar_mask][['Pfd path']]
-all_noise = df[noise_mask][['Pfd path']]
-all_RFI = df[RFI_mask][['Pfd path']]
-all_unlabelled = df[unlabelled_mask][['Pfd path']]
+# Get pandas dataframe of noise candidates (avg rating <= 2, no RFI)
+url = 'http://localhost:8000/api/candidates/avg_rating__lte=2'
+param = {'rfi': False}
+all_noise = get_dataframe(url, param)
 
-# Add the labels (1 for pulsar, 0 for non-pulsar)
-all_pulsars['Classification'] = 1
-all_noise['Classification'] = 0
-all_RFI['Classification'] = 0
+# Get pandas dataframe of RFI candidates (avg rating <= 2, RFI)
+url = 'http://localhost:8000/api/candidates/avg_rating__lte=2'
+param = {'rfi': True}
+all_RFI = get_dataframe(url, param)
+
+# Get pandas dataframe of all candidates
+all_cands = get_dataframe()
 
 # The total number of each candidate type available
 total_num_pulsars = len(all_pulsars.index)
 total_num_noise = len(all_noise.index)
 total_num_RFI = len(all_RFI.index)
-total_num_unlabelled = len(all_unlabelled.index)
+total_num_cands = len(all_cands.index)
+
+# Randomly shuffle all the dataframes
+all_pulsars = all_pulsars.sample(n = total_num_pulsars)
+all_noise = all_noise.sample(n = total_num_noise)
+all_RFI = all_RFI.sample(n = total_num_RFI)
+all_cands = all_cands.sample(n = total_num_cands)
+
+# NOTE: Now, the plan is to run through the (shuffled) dataframes,
+# adding each candidate to the new list only if it isn't a duplicate
+# (detections of the same pulsar from different beams in the same observation),
+# until we reach the required number of candidates or run out
+# NOTE: Actually the above is going to be harder than I thought
+# (Need Observations table, etc.)
+
 
 # The number of each candidate type to use
 # Based on the selection rules described at the top
 num_pulsars = min(num_pulsars, total_num_pulsars, 2*total_num_noise, 3*total_num_RFI)
 num_RFI = min(floor(num_pulsars/2), total_num_RFI)
 num_noise = num_pulsars - num_RFI
-num_unlabelled = min(num_unlabelled, total_num_unlabelled)
+
+
 
 # Randomly sample the required number of each candidate type
-all_pulsars = all_pulsars.sample(n = num_pulsars, random_state = 1)
-all_noise = all_noise.sample(n = num_noise, random_state = 1)
-all_RFI = all_RFI.sample(n = num_RFI, random_state = 1)
-all_unlabelled = all_unlabelled.sample(n = num_unlabelled, random_state = 1)
+all_pulsars = all_pulsars.sample(n = num_pulsars)
+all_noise = all_noise.sample(n = num_noise)
+all_RFI = all_RFI.sample(n = num_RFI)
+
 
 # Print the number of pulsar, RFI and noise candidates in the labelled training set,
 # plus the total number of candidates in the unlabelled and validation sets
 num_training_pulsars = floor(num_pulsars * (1 - validation_ratio))
 num_training_noise = floor(num_noise * (1 - validation_ratio))
 num_training_RFI = floor(num_RFI * (1 - validation_ratio))
-num_validation = num_pulsars + num_noise + num_RFI - num_training_pulsars - num_training_noise - num_training_RFI 
+num_validation_pulsars = num_pulsars - num_training_pulsars
+num_validation_noise = num_noise - num_training_noise
+num_validation_RFI = num_RFI - num_training_RFI 
+
+# NOTE: Do unlabelled stuff later, so that we can filter out candidates
+# already assigned to the other sets
+total_num_unlabelled = len(all_unlabelled.index)
+num_unlabelled = min(num_unlabelled, total_num_unlabelled)
+all_unlabelled = all_unlabelled.sample(n = num_unlabelled, random_state = 1)
+
 
 print(f"Number of training pulsar candidates: {num_training_pulsars}")
 print(f"Number of training noise candidates: {num_training_noise}")
 print(f"Number of training RFI candidates: {num_training_RFI}")
 print(f"Number of unlabelled training candidates: {num_unlabelled}")
-print(f"Total number of validation candidates: {num_validation}")
+print(f"Number of validation pulsar candidates: {num_validation_pulsars}")
+print(f"Number of validation noise candidates: {num_validation_noise}")
+print(f"Number of validation RFI candidates: {num_validation_RFI}")
+
+
+# Will this be needed?
+training_pulsars = all_pulsars.iloc[:num_training_pulsars]
+training_noise = all_noise.iloc[:num_training_noise]
+training_RFI = all_RFI.iloc[:num_training_RFI]
+validation_pulsars = all_pulsars.iloc[num_training_pulsars+1:]
+validation_noise = all_noise.iloc[num_training_noise+1:]
+validation_RFI = all_RFI.iloc[num_training_RFI+1:]
+
 
 # Construct the labelled training and validation sets
 # The unlabelled training set is "all_unlabelled" (no changes required)
@@ -162,6 +197,17 @@ validation_set = pd.concat([all_pulsars.iloc[num_training_pulsars+1:], \
                              all_noise.iloc[num_training_noise+1:], \
                              all_RFI.iloc[num_training_RFI+1:]])
 
+
+
+# To upload data at the end
+my_json = df.to_json(orient='index') # 'index' may not be the right choice
+my_session.post('http://localhost:8000/api/ml-training-sets/', json=my_json)
+my_session.close()
+
+########
+
+# Make the target directory, if it doesn't already exist
+os.makedirs(path_to_data, exist_ok=True)
 
 # Downloads pfd files from the DATABASE_URL to the candidates directory
 # Returns False and prints a message if the download fails, otherwise returns True

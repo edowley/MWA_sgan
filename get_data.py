@@ -45,7 +45,7 @@ import numpy as np
 import os
 import pandas as pd
 import sys
-from time import time, sleep
+from time import time
 from ubc_AI.training import pfddata
 from urllib.request import urlretrieve
 
