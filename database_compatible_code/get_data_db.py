@@ -66,12 +66,11 @@ N_FEATURES = 4
 
 # Parse arguments
 parser = argparse.ArgumentParser(description='Download pfd files, label, and extract as numpy array files.')
-parser.add_argument('-c', '--candidates_path', help='Absolute path of output directory for candidate data', default='/data/SGAN_Test_Data/candidates/')
-parser.add_argument('-l', '--labels_path', help='Absolute path of output directory for label csv files',  default='/data/SGAN_Test_Data/labels/')
-parser.add_argument('-p', '--num_pulsars', help='Number of pulsars (and also non-pulsars) to use', default=DEFAULT_NUM_PULSARS, type=int)
+parser.add_argument('-c', '--candidates_path', help='Absolute path of output directory for candidate data', default='/data/SGAN_Data/candidates/')
+parser.add_argument('-p', '--num_pulsars', help='Number of (labelled) pulsars (and non-pulsars) to use', default=DEFAULT_NUM_PULSARS, type=int)
 parser.add_argument('-u', '--num_unlabelled', help='Number of unlabelled candidates to use', default=DEFAULT_NUM_UNLABELLED, type=int)
 parser.add_argument('-v', '--validation_ratio', help='Proportion of labelled candidates to use in the validation set', default=DEFAULT_VALIDATION_RATIO, type=float)
-parser.add_argument('-x', '--set_ID', help='Identifier to append to the label file names for these sets', default="", type=str)
+parser.add_argument('-x', '--set_collection_name', help='Name of the MlTrainingSetCollection', default="", type=str)
 
 args = parser.parse_args()
 path_to_data = args.candidates_path
@@ -79,7 +78,7 @@ path_to_labels = args.labels_path
 num_pulsars = args.num_pulsars
 num_unlabelled = args.num_unlabelled
 validation_ratio = args.validation_ratio
-set_ID = args.set_ID
+set_collection_name = args.set_collection_name
 
 
 # Database stuff
@@ -94,26 +93,27 @@ class TokenAuth(requests.auth.AuthBase):
 my_session = requests.session()
 my_session.auth = TokenAuth("fagkjfasbnlvasfdfwjf783YDF")
 
-def get_dataframe(url='http://localhost:8000/api/candidates/', param=None):
+def get_dataframe(url='http://localhost:8000/api/candidates/?ml_ready_pulsars=true', param=None):
     try:
-        cands = my_session.get(url, params=param)
-        cands_for_status()
+        table = my_session.get(url, params=param)
+        table.raise_for_status()
     except requests.exceptions.HTTPError as err:
         print(err)
-    return pd.read_json(cands.json)
+    return pd.read_json(table.json)
 
 # Get pandas dataframe of pulsar candidates (avg rating >= 4, no RFI)
-url = 'http://localhost:8000/api/candidates/avg_rating__gte=4'
+# Candidates associated with the same pulsar are guaranteed to come from different observations
+url = 'http://localhost:8000/api/candidates/?avg_rating__gte=4&ml_ready_pulsars=true'
 param = {'rfi': False}
 all_pulsars = get_dataframe(url, param)
 
 # Get pandas dataframe of noise candidates (avg rating <= 2, no RFI)
-url = 'http://localhost:8000/api/candidates/avg_rating__lte=2'
+url = 'http://localhost:8000/api/candidates/?avg_rating__lte=2&ml_ready_pulsars=true'
 param = {'rfi': False}
 all_noise = get_dataframe(url, param)
 
 # Get pandas dataframe of RFI candidates (avg rating <= 2, RFI)
-url = 'http://localhost:8000/api/candidates/avg_rating__lte=2'
+url = 'http://localhost:8000/api/candidates/?avg_rating__lte=2&ml_ready_pulsars=true'
 param = {'rfi': True}
 all_RFI = get_dataframe(url, param)
 
@@ -126,36 +126,19 @@ total_num_noise = len(all_noise.index)
 total_num_RFI = len(all_RFI.index)
 total_num_cands = len(all_cands.index)
 
-# Randomly shuffle all the dataframes
-all_pulsars = all_pulsars.sample(n = total_num_pulsars)
-all_noise = all_noise.sample(n = total_num_noise)
-all_RFI = all_RFI.sample(n = total_num_RFI)
-all_cands = all_cands.sample(n = total_num_cands)
-
-# NOTE: Now, the plan is to run through the (shuffled) dataframes,
-# adding each candidate to the new list only if it isn't a duplicate
-# (detections of the same pulsar from different beams in the same observation),
-# until we reach the required number of candidates or run out
-# NOTE: Actually the above is going to be harder than I thought
-# (Need Observations table, etc.)
-
-
 # The number of each candidate type to use
 # Based on the selection rules described at the top
 num_pulsars = min(num_pulsars, total_num_pulsars, 2*total_num_noise, 3*total_num_RFI)
 num_RFI = min(floor(num_pulsars/2), total_num_RFI)
 num_noise = num_pulsars - num_RFI
 
-
-
 # Randomly sample the required number of each candidate type
 all_pulsars = all_pulsars.sample(n = num_pulsars)
 all_noise = all_noise.sample(n = num_noise)
 all_RFI = all_RFI.sample(n = num_RFI)
 
-
-# Print the number of pulsar, RFI and noise candidates in the labelled training set,
-# plus the total number of candidates in the unlabelled and validation sets
+# The number of pulsar, RFI and noise candidates in the labelled training set
+# and labelled validation set
 num_training_pulsars = floor(num_pulsars * (1 - validation_ratio))
 num_training_noise = floor(num_noise * (1 - validation_ratio))
 num_training_RFI = floor(num_RFI * (1 - validation_ratio))
@@ -163,23 +146,23 @@ num_validation_pulsars = num_pulsars - num_training_pulsars
 num_validation_noise = num_noise - num_training_noise
 num_validation_RFI = num_RFI - num_training_RFI 
 
-# NOTE: Do unlabelled stuff later, so that we can filter out candidates
-# already assigned to the other sets
+# Filter out candidates assigned to the labelled sets from the unlabelled set
+all_unlabelled = all_unlabelled[~all_unlabelled.index.isin(all_pulsars.index.append(all_noise.index.append(all_RFI.index)))]
+# Randomly sample the required number of unlabelled candidates
 total_num_unlabelled = len(all_unlabelled.index)
 num_unlabelled = min(num_unlabelled, total_num_unlabelled)
 all_unlabelled = all_unlabelled.sample(n = num_unlabelled, random_state = 1)
 
-
+# Print the number of candidates in each set
 print(f"Number of training pulsar candidates: {num_training_pulsars}")
 print(f"Number of training noise candidates: {num_training_noise}")
 print(f"Number of training RFI candidates: {num_training_RFI}")
-print(f"Number of unlabelled training candidates: {num_unlabelled}")
 print(f"Number of validation pulsar candidates: {num_validation_pulsars}")
 print(f"Number of validation noise candidates: {num_validation_noise}")
 print(f"Number of validation RFI candidates: {num_validation_RFI}")
+print(f"Number of unlabelled training candidates: {num_unlabelled}")
 
-
-# Will this be needed?
+# Separate the labelled training and validation sets
 training_pulsars = all_pulsars.iloc[:num_training_pulsars]
 training_noise = all_noise.iloc[:num_training_noise]
 training_RFI = all_RFI.iloc[:num_training_RFI]
@@ -187,20 +170,34 @@ validation_pulsars = all_pulsars.iloc[num_training_pulsars+1:]
 validation_noise = all_noise.iloc[num_training_noise+1:]
 validation_RFI = all_RFI.iloc[num_training_RFI+1:]
 
+# Ensure that the MlTrainingSetCollection has a valid name:
 
-# Construct the labelled training and validation sets
-# The unlabelled training set is "all_unlabelled" (no changes required)
-training_set = pd.concat([all_pulsars.iloc[:num_training_pulsars], \
-                             all_noise.iloc[:num_training_noise], \
-                             all_RFI.iloc[:num_training_RFI]])
-validation_set = pd.concat([all_pulsars.iloc[num_training_pulsars+1:], \
-                             all_noise.iloc[num_training_noise+1:], \
-                             all_RFI.iloc[num_training_RFI+1:]])
+set_collections = get_dataframe('http://localhost:8000/api/ml-training-set-collections/').index
+
+def check_name_validity(name):
+    if name == "":
+        return False
+    elif name in set_collections:
+        print(f"The name {set_collection_name} is already in use")
+        return False
+    else:
+        return True
+
+valid = check_name_validity(set_collection_name)
+while not valid:
+    set_collection_name = input("Enter a name for the MlTrainingSetCollection: ")
+    valid = check_name_validity
+
+# Create the json files for the MlTrainingSets
 
 
+# Create the json files for the MlTrainingSetTypes
+
+
+# Create the json files for the MlTrainingSetCollections
 
 # To upload data at the end
-my_json = df.to_json(orient='index') # 'index' may not be the right choice
+my_json = df.to_json()
 my_session.post('http://localhost:8000/api/ml-training-sets/', json=my_json)
 my_session.close()
 
