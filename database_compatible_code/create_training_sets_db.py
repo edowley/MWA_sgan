@@ -1,24 +1,27 @@
 ###############################################################################
 #
-# Database-compatible version (WIP). 
-#
-# This file contains code that will create appropriate MlTrainingSets, etc.
+# Randomly selects appropriate Candidates for a complete MlTrainingSetCollection
+# (consisting of 7 MlTrainingSets with their associated MlTrainingSetTypes)
+# and updates the database accordingly.
 # 
-#       1. Takes as arguments the desired number of (labelled) pulsars, number of unlabelled
-#          candidates, and validation/training set size ratio.
-#       2. Queries the database for pulsars, noise, RFI and unlabelled candidates.
-#           - Pulsars: Avg rating >= 4, no RFI
-#           - Noise: Avg rating <= 2, no RFI
-#           - RFI: Avg rating <= 2, RFI
-#           - Unlabelled: Any (not selected in the other sets)
-#       3. Candidates are randomly chosen for each of the sets based on the available
-#          number of each candidate type (pulsars, noise, and RFI), the requested number
-#          of pulsars, and the following rules:
-#           - The ratio of pulsars to non-pulsars will be 1:1
-#           - The ratio of noise to RFI will be between 1:1 (preferred) and 2:1
-#           - The default ratio of labelled training data to validation data is 4:1
-#           - Any amount of unlabelled training data can be used
-#       4. 
+#    1. Takes as arguments the desired number of pulsars, number of unlabelled
+#       candidates, and validation/training set size ratio; as well as a name
+#       for the new MlTrainingSetCollection.
+#         - The default values are at the start of the code
+#    2. Queries the database for pulsars, noise, RFI and unlabelled candidates.
+#         - Pulsars: Avg rating >= 4, no RFI
+#         - Noise: Avg rating <= 2, no RFI
+#         - RFI: Avg rating <= 2, RFI
+#         - Unlabelled: All
+#    3. Candidates are randomly chosen for each set based on the following rules:
+#         - The ratio of pulsars to non-pulsars will be 1:1
+#         - The ratio of noise to RFI will be between 1:1 (preferred) and 2:1
+#         - Candidates associated with the same pulsar must come from different
+#           observations
+#         - Any Candidate not chosen for another set can be in the unlabelled set
+#         - Candidates must not have an empty "file" field
+#    4. The names of the new MlTrainingSets consist of the MlTrainingSetCollection
+#       name, plus a suffix indicating set type (e.g. my_collection_tp).
 #
 ###############################################################################
 
@@ -30,10 +33,9 @@ import os
 import pandas as pd
 import requests
 
-
 # Default values
-DEFAULT_NUM_PULSARS = 32
-DEFAULT_NUM_UNLABELLED = 64
+DEFAULT_NUM_PULSARS = 64
+DEFAULT_NUM_UNLABELLED = 256
 DEFAULT_VALIDATION_RATIO = 0.2
 
 # Parse arguments
@@ -59,12 +61,16 @@ class TokenAuth(requests.auth.AuthBase):
         r.headers['Authorization'] = "Token {}".format(self.token)
         return r
 
+# Start authorised session
 my_session = requests.session()
 my_session.auth = TokenAuth("fagkjfasbnlvasfdfwjf783YDF")
 
+
+########## Function Definitions ##########
+
 # Downloads the requested json file and returns the primary keys as a numpy array
 # Only works if the pk column is called 'id' or 'name'
-def get_keys(url='http://localhost:8000/api/candidates/?ml_ready_pulsars=true', param=None):
+def get_keys(url='http://localhost:8000/api/candidates/', param=None):
     try:
         table = my_session.get(url, params=param)
         table.raise_for_status()
@@ -80,27 +86,66 @@ def get_keys(url='http://localhost:8000/api/candidates/?ml_ready_pulsars=true', 
             print("This table has no 'id' or 'name' column.")
     return np.array(keys)
 
-# Query parameter 'ml_ready_pulsars=true' means that candidates associated with
-# the same pulsar are guaranteed to come from different observations
+# Checks if a MlTrainingSetCollection name is valid
+def check_name_validity(name):
+    if name == "":
+        return False
+    elif name in set_collections:
+        print(f"The name {set_collection_name} is already in use")
+        return False
+    else:
+        return True
+
+# Creates the json file for a new MlTrainingSet
+def create_Ml_Training_Set(name, candidates):
+    data = {}
+    data['name'] = name
+    data['candidates'] = candidates
+    return json.dumps(data)
+
+# Creates the json file for a new MlTrainingSetType
+def create_Ml_Training_Set_Type(training_set, label):
+    data = {}
+    data['ml_training_set'] = training_set
+    data['type'] = label
+    return json.dumps(data)
+
+# Creates the json file for a new MlTrainingSetCollection
+def create_Ml_Training_Set_Collection(name, set_types):
+    data = {}
+    data['name'] = name
+    data['ml_training_set_types'] = set_types
+    return json.dumps(data)
+
+
+########## Candidate Selection ##########
+
+# Query parameter 'ml_ready_pulsars=true' ensures that Candidates associated with
+# the same pulsar come from different observations
+# 'file=' (with no argument) ensures that the Candidates have a file
+
+URL = 'http://localhost:8000/api/candidates/?file='
 
 # Get array of pulsar candidates (avg rating >= 4, no RFI)
-url = 'http://localhost:8000/api/candidates/?avg_rating__gte=4&ml_ready_pulsars=true'
-param = {'rfi': False}
-all_pulsars = get_keys(url, param)
+PARAMS = {'ml_ready_pulsars': True, 'avg_rating__gte': 4, 'rfi': False}
+all_pulsars = get_keys(URL, PARAMS)
 
 # Get array of noise candidates (avg rating <= 2, no RFI)
-url = 'http://localhost:8000/api/candidates/?avg_rating__lte=2&ml_ready_pulsars=true'
-param = {'rfi': False}
-all_noise = get_keys(url, param)
+PARAMS = {'ml_ready_pulsars': True, 'avg_rating__lte': 2, 'rfi': False}
+all_noise = get_keys(URL, PARAMS)
 
 # Get array of RFI candidates (avg rating <= 2, RFI)
-url = 'http://localhost:8000/api/candidates/?avg_rating__lte=2&ml_ready_pulsars=true'
-param = {'rfi': True}
-all_RFI = get_keys(url, param)
+PARAMS = {'ml_ready_pulsars': True, 'avg_rating__lte': 2, 'rfi': True}
+all_RFI = get_keys(URL, PARAMS)
 
 # Get array of all candidates
 all_cands = get_keys()
 
+## NOTE Alternative to all_cands:
+# PARAMS = {'avg_rating__isnull': True}
+# all_unlabelled = get_keys(URL, PARAMS)
+## Would save memory and eliminate some later steps, but...
+## Relies on a large number of Candidates not receiving Ratings (likely)
 
 # The total number of each candidate type available
 total_num_pulsars = len(all_pulsars)
@@ -145,36 +190,24 @@ print(f"Number of validation RFI candidates: {num_validation_RFI}")
 print(f"Number of unlabelled training candidates: {num_unlabelled}")
 
 
-# Ensure that the MlTrainingSetCollection has a valid name:
+########## Database Object Creation ##########
 
+# Get the list of all MlTrainingSetCollection names
 set_collections = get_keys('http://localhost:8000/api/ml-training-set-collections/')
 
-def check_name_validity(name):
-    if name == "":
-        return False
-    elif name in set_collections:
-        print(f"The name {set_collection_name} is already in use")
-        return False
-    else:
-        return True
-
+# Ensure that the chosen MlTrainingSetCollection name is valid
 valid = check_name_validity(set_collection_name)
 while not valid:
     set_collection_name = input("Enter a name for the MlTrainingSetCollection: ")
-    valid = check_name_validity
+    valid = check_name_validity(set_collection_name)
 
+'''MlTrainingSets'''
 
-# Create json files for the MlTrainingSets:
-
-def create_Ml_Training_Set(name, candidates):
-    data = {}
-    data['name'] = name
-    data['candidates'] = candidates
-    return json.dumps(data)
-
+# The names of the new MlTrainingSets
 set_type_suffixes = ["_tp", "_tn", "_tr", "_vp", "_vn", "_vr", "_u"]
 set_names = set_collection_name + set_type_suffixes
 
+# Create the MlTrainingSets
 training_pulsars = create_Ml_Training_Set(set_names[0], all_pulsars[:num_training_pulsars])
 training_noise = create_Ml_Training_Set(set_names[1], all_noise[:num_training_noise])
 training_RFI = create_Ml_Training_Set(set_names[2], all_RFI[:num_training_RFI])
@@ -192,14 +225,9 @@ my_session.post('http://localhost:8000/api/ml-training-sets/', json=validation_n
 my_session.post('http://localhost:8000/api/ml-training-sets/', json=validation_RFI)
 my_session.post('http://localhost:8000/api/ml-training-sets/', json=unlabelled_training)
 
-# Create json files for the MlTrainingSetTypes:
+'''MlTrainingSetTypes'''
 
-def create_Ml_Training_Set_Type(training_set, label):
-    data = {}
-    data['ml_training_set'] = training_set
-    data['type'] = label
-    return json.dumps(data)
-
+# Create the MlTrainingSetTypes
 tp_type = create_Ml_Training_Set_Type(set_names[0], "TRAINING PULSARS")
 tn_type = create_Ml_Training_Set_Type(set_names[1], "TRAINING NOISE")
 tr_type = create_Ml_Training_Set_Type(set_names[2], "TRAINING RFI")
@@ -217,19 +245,15 @@ vn_id = my_session.post('http://localhost:8000/api/ml-training-set-types/', json
 vr_id = my_session.post('http://localhost:8000/api/ml-training-set-types/', json=vr_type).json['id']
 u_id = my_session.post('http://localhost:8000/api/ml-training-set-types/', json=u_type).json['id']
 
-# Create the json files for the MlTrainingSetCollection
+'''MlTrainingSetCollection'''
 
-def create_Ml_Training_Set_Collection(name, set_types):
-    data = {}
-    data['name'] = name
-    data['ml_training_set_types'] = set_types
-    return json.dumps(data)
-
+# The list of ids of the MlTrainingSetTypes in this collection
 set_types_list = [tp_id, tn_id, tr_id, vp_id, vn_id, vr_id, u_id]
-finished_collection = create_MlTraining_Set_Collection(collection_name, set_types_list)
 
-# Post the MlTrainingSetCollection
+# Create and Post the MlTrainingSetCollection
+finished_collection = create_MlTraining_Set_Collection(collection_name, set_types_list)
 my_session.post('http://localhost:8000/api/ml-training-set-collections/', json=finished_collection)
+
 
 my_session.close()
 

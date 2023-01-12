@@ -1,12 +1,17 @@
 ###############################################################################
 #
-# Database-compatible version (WIP). 
-#
-# This file contains code that will download and process the required files.
+# This file contains code that will download and process the Candidate data
+# for a particular MlTrainingSetCollection.
 # 
-#       1. This description,
-#          has not been written yet.
-#           - Come back later
+#    1. Takes as arguments the path of the data directory and the name of the
+#       MlTrainingSetCollection to download.
+#         - The data directory is the parent of the 'candidates/' directory
+#    2. Downloads the PFD files of all Candidates in the collection, extracts
+#       their contents to NumPy array files, and deletes the PFDs.
+#         - Failed downloads or extractions will prompt a warning message
+#         - Differences from the old version (pre database update):
+#             - The file names (from the database) now begin with 'candidates/'
+#             - No label files are generated
 #
 ###############################################################################
 
@@ -27,20 +32,23 @@ from urllib.request import urlretrieve
 
 
 # Constants
+DATABASE_URL = 'https://apps.datacentral.org.au/smart/media/'
 NUM_CPUS = cpu_count()
 N_FEATURES = 4
 
 # Parse arguments
 parser = argparse.ArgumentParser(description='Download pfd files, label, and extract as numpy array files.')
-parser.add_argument('-d', '--data_directory', help='Absolute path of output directory for candidate data', default='/data/SGAN_Data/candidates/')
-parser.add_argument('-n', '--collection_name', help='Name of the MlTrainingSetCollection', default="", type=str)
+parser.add_argument('-d', '--data_directory', help='Absolute path of the data directory (contains the candidates/ subdirectory)', default='/data/SGAN_Test_Data/')
+parser.add_argument('-n', '--collection_name', help='Name of the MlTrainingSetCollection to download', default="")
 
 args = parser.parse_args()
 path_to_data = args.data_directory
 collection_name = args.collection_name
 
+# Make the target directory, if it doesn't already exist
+os.makedirs(path_to_data, exist_ok=True)
 
-# Database stuff
+# Database token
 class TokenAuth(requests.auth.AuthBase):
     def __init__(self, token):
         self.token = token
@@ -49,12 +57,15 @@ class TokenAuth(requests.auth.AuthBase):
         r.headers['Authorization'] = "Token {}".format(self.token)
         return r
 
+# Start authorised session
 my_session = requests.session()
 my_session.auth = TokenAuth("fagkjfasbnlvasfdfwjf783YDF")
 
 
+########## Function Definitions ##########
+
 # Downloads the requested json file and returns it as a pandas dataframe
-def get_dataframe(url='http://localhost:8000/api/candidates/?ml_ready_pulsars=true', param=None):
+def get_dataframe(url='http://localhost:8000/api/candidates/', param=None):
     try:
         table = my_session.get(url, params=param)
         table.raise_for_status()
@@ -64,7 +75,7 @@ def get_dataframe(url='http://localhost:8000/api/candidates/?ml_ready_pulsars=tr
 
 # Downloads the requested json file and returns the primary keys as a numpy array
 # Only works if the pk column is called 'id' or 'name'
-def get_keys(url='http://localhost:8000/api/candidates/?ml_ready_pulsars=true', param=None):
+def get_keys(url='http://localhost:8000/api/candidates/', param=None):
     try:
         table = my_session.get(url, params=param)
         table.raise_for_status()
@@ -80,48 +91,15 @@ def get_keys(url='http://localhost:8000/api/candidates/?ml_ready_pulsars=true', 
             print("This table has no 'id' or 'name' column.")
     return np.array(keys)
 
-
-# Ensure that the MlTrainingSetCollection name is valid:
-
-set_collections = get_keys('http://localhost:8000/api/ml-training-set-collections/')
-
-def check_name_validity(name):
+# Checks if a MlTrainingSetCollection exists
+def check_collection_existence(name):
     if name in set_collections:
         return True
     elif name == "":
         return False
     else:
-        print(f"The name {name} doesn't match a MlTrainingSetCollection")
+        print(f"The name {name} doesn't match an existing MlTrainingSetCollection")
         return False
-
-valid = check_name_validity(collection_name)
-while not valid:
-    collection_name = input("Enter the name of the MlTrainingSetCollection to use: ")
-    valid = check_name_validity
-
-
-# Get the requested MlTrainingSetCollection
-url = f'http://localhost:8000/api/ml-training-set-collections/?name={collection_name}'
-collection = get_dataframe(url)
-
-# Get the associated MlTrainingSetTypes
-set_type_ids = collection['ml_training_set_types']
-set_types = []
-for set_type_id in set_type_ids:
-    url = f'http://localhost:8000/api/ml-training-set-types/?id={set_type_id}'
-    set_types.append(get_dataframe(url))
-
-# Get the associated MlTrainingSets
-set_names = [set_type['ml_training_set'] for set_type in set_types]
-training_sets = []
-for set_name in set_names:
-    url = f'http://localhost:8000/api/ml-training-sets/?name={set_name}'
-    training_sets.append(get_dataframe(url))
-
-
-# Make the target directory, if it doesn't already exist
-os.makedirs(path_to_data, exist_ok=True)
-
 
 # Downloads pfd files from the database to the candidates directory
 # Returns False and prints a message if the download fails, otherwise returns True
@@ -188,29 +166,46 @@ def parallel_extraction(extraction_list):
     print(f"Extraction time: {total_time}")
     return successes
 
+########## End of Function Definitions ##########
 
 
-#################### WIP beyond this point ####################
+# Get the list of all MlTrainingSetCollection names
+set_collections = get_keys('http://localhost:8000/api/ml-training-set-collections/')
 
+# Ensure that the requested MlTrainingSetCollection exists
+exists = check_collection_existence(collection_name)
+while not exists:
+    collection_name = input("Enter the name of the MlTrainingSetCollection to download: ")
+    exists = check_collection_existence(collection_name)
+
+# Get the names of the MlTrainingSets associated with the MlTrainingSetCollection
+URL = f'http://localhost:8000/api/ml-training-sets/?type__collection={collection_name}'
+training_sets = get_keys(URL)
 num_of_sets = len(training_sets)
 
-# NOTE There is definitely a better way of getting the candidates in a particular collections
-# The "working backwards" approach used above is okay if there are only a few items,
-# but with hundreds of candidates it's obviously stupid
-
+num_failed_downloads = []
+num_failed_extractions = []
+# Download and extract the data for all Candidates associated with each MlTrainingSet
 for i in range(num_of_sets):
-    print(f"Starting work on set {i} of {num_of_sets}.")
-    list_of_pfd_paths = ??????
+    print(f"Starting work on set {i}/{num_of_sets}, {training_sets[i]}.")
+    URL = f'http://localhost:8000/api/candidates/?ml_training_set={training_sets[i]}&file='
+    candidates = get_dataframe(URL)
+    list_of_pfd_paths = candidates['file'].values
     # Download the pfd files and keep track of failed downloads
     download_successes = parallel_download(list_of_pfd_paths)
-    # Remove failed downloads from the dataframe (so it matches the directory contents)
-    training_set = training_set[download_successes]
     # Extract the pfds to numpy arrays, delete the pfds, and track failed extractions
     extraction_successes = parallel_extraction(list_of_pfd_paths)
-    # Remove failed extractions from the dataframe
-    training_set = training_set[extraction_successes]
+    # Count the number of failed downloads/extractions
+    num_failed_downloads.append(np.count_nonzero(download_successes=False))
+    num_failed_extractions.append(np.count_nonzero(extraction_successes=False))
+    if (num_failed_downloads != 0) or (num_failed_extractions != 0):
+        print(f"Warning: MlTrainingSet {training_sets[i]} had {num_failed_downloads} failed downloads and {num_failed_extractions} failed extractions.")
 
-# NOTE Might also want to change the way failed downloads/extractions are treated,
-# now that the MlTrainingSets are stored in the database
+# Print warnings about failed downloads/extractions, if any
+if (np.count_nonzero(num_failed_downloads) != 0) or (np.count_nonzero(num_failed_extractions) != 0):
+    print("Warning: Some failed downloads or extractions were detected.")
+    for i in range(num_of_sets):
+        if (num_failed_downloads[i] != 0) or (num_failed_extractions[i] != 0):
+            print(f"MlTrainingSet {training_sets[i]} had {num_failed_downloads[i]} failed downloads and {num_failed_extractions[i]} failed extractions.")
 
 print("All done!")
