@@ -1,9 +1,7 @@
 ###############################################################################
 #
-# Database-compatible version (WIP). 
-#
-# This file contains code that will retrain the SGAN using the labelled, unlabelled,
-# and validation sets constructed by get_data.py.
+# This file contains code that will retrain the SGAN using the chosen
+# MlTrainingSetCollection, as long as the files have been downloaded.
 # 
 #       1. This description,
 #          has not been written yet.
@@ -13,20 +11,28 @@
 
 import argparse, errno, glob, itertools, math, os, pickle, sys
 from classifiers import Train_SGAN_DM_Curve, Train_SGAN_Pulse_Profile, Train_SGAN_Freq_Phase, Train_SGAN_Time_Phase
+import concurrent.futures as cf
+import json
 from keras import backend
 from keras.callbacks import TensorBoard, EarlyStopping, ModelCheckpoint
 from keras.layers import Activation, BatchNormalization, concatenate, Conv1D, Conv2D, Dense, Dropout, Flatten, Input, LeakyReLU, MaxPooling2D, MaxPooling1D, Reshape, UpSampling2D, ZeroPadding2D
 from keras.models import load_model, Model, Sequential
 from keras.optimizers import Adam
 import matplotlib.pyplot as plt
+from multiprocessing import cpu_count
 import numpy as np
 import pandas as pd
+import requests
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import confusion_matrix, f1_score, precision_score, recall_score, log_loss
 from sklearn.model_selection import train_test_split
+import sys
 import tensorflow as tf
 from time import time
 
+# Constants
+NUM_CPUS = cpu_count()
+N_FEATURES = 4
 
 class NotADirectoryError(Exception):
     pass
@@ -38,36 +44,27 @@ def dir_path(string):
         raise NotADirectoryError("Directory path is not valid.")
 
 '''
-# Class Labels format
-0 -> Non-Pulsar
+# Class Labels
 1 -> Pulsar
+0 -> Non-Pulsar
 -1 -> Unlabelled Candidate
 '''
 # Parse arguments
 parser = argparse.ArgumentParser(description='Re-train SGAN machine learning model using files sourced by get_data.py')
-parser.add_argument('-c', '--candidates_path', help='Absolute path of directory containing candidate data', default='/data/SGAN_Test_Data/candidates/')
-parser.add_argument('-l', '--labels_path', help='Absolute path of directory containing label csv files',  default='/data/SGAN_Test_Data/labels/')
-parser.add_argument('-m', '--models_path', help='Absolute path of output directory for saved models',  default='/data/SGAN_Test_Data/models/')
+parser.add_argument('-d', '--data_directory', help='Absolute path of the data directory (contains the candidates/ and models/ subdirectories)', default='/data/SGAN_Test_Data/')
+parser.add_argument('-n', '--collection_name', help='Name of the MlTrainingSetCollection to download', default="")
 parser.add_argument('-b', '--batch_size', help='No. of pfd files that will be read in one batch', default='16', type=int)
 parser.add_argument('-e', '--num_epochs', help='No. of epochs to train', default='20', type=int)
-parser.add_argument('-x', '--set_ID', help='Identifier appended to the label file names for these sets', default="", type=str)
 
 args = parser.parse_args()
-path_to_data = args.candidates_path
-path_to_labels = args.labels_path
-path_to_models = args.models_path
+path_to_data = args.data_directory
+path_to_models = path_to_data + 'models/'
+collection_name = args.collection_name
 batch_size = args.batch_size
 num_epochs = args.num_epochs
-set_ID = args.set_ID
-
-# Absolute paths to label csv files
-training_labels_file = f"{path_to_labels}training_labels{set_ID}.csv"
-validation_labels_file = f"{path_to_labels}validation_labels{set_ID}.csv"
-unlabelled_labels_file = f"{path_to_labels}unlabelled_labels{set_ID}.csv"
 
 # Check that the specified input and output directories exist
-dir_path(path_to_data)
-dir_path(path_to_labels)
+dir_path(path_to_data + 'candidates/')
 os.makedirs(path_to_models, exist_ok=True)
 
 # Check that the output subdirectories exist
@@ -76,31 +73,196 @@ os.makedirs(path_to_models + 'intermediate_models/', exist_ok=True)
 os.makedirs(path_to_models + 'MWA_best_retrained_models/', exist_ok=True)
 
 
-# Read the label files as pandas dataframes
-training_labels = pd.read_csv(training_labels_file, header = 0, index_col = 0, \
-                dtype = {'ID': int, 'Pfd path': 'string', 'Classification': int})
-validation_labels = pd.read_csv(validation_labels_file, header = 0, index_col = 0, \
-                dtype = {'ID': int, 'Pfd path': 'string', 'Classification': int})
-unlabelled_labels = pd.read_csv(unlabelled_labels_file, header = 0, index_col = 0, \
-                dtype = {'ID': int, 'Pfd path': 'string', 'Classification': int})
+# Database token
+class TokenAuth(requests.auth.AuthBase):
+    def __init__(self, token):
+        self.token = token
 
-# Extract the absolute paths of the candidate pfd files
-# (The pfd files no longer exist, but the numpy array files have similar names)
-training_files = path_to_data + training_labels['Pfd path'].to_numpy()
-validation_files = path_to_data + validation_labels['Pfd path'].to_numpy()
-unlabelled_files = path_to_data + unlabelled_labels['Pfd path'].to_numpy()
+    def __call__(self, r):
+        r.headers['Authorization'] = "Token {}".format(self.token)
+        return r
 
-# Extract the labels, creating labels of -1 for the unlabelled candidates
-training_labels = training_labels['Classification'].to_numpy()
-validation_labels = validation_labels['Classification'].to_numpy()
+# Start authorised session
+my_session = requests.session()
+my_session.auth = TokenAuth("fagkjfasbnlvasfdfwjf783YDF")
+
+
+########## Function Definitions ##########
+
+# Downloads the requested json file and returns it as a pandas dataframe
+def get_dataframe(url='http://localhost:8000/api/candidates/', param=None):
+    try:
+        table = my_session.get(url, params=param)
+        table.raise_for_status()
+    except requests.exceptions.HTTPError as err:
+        print(err)
+    return pd.read_json(table.json)
+
+# Downloads the requested json file and returns the primary keys as a numpy array
+# Only works if the pk column is called 'id' or 'name'
+def get_keys(url='http://localhost:8000/api/candidates/', param=None):
+    try:
+        table = my_session.get(url, params=param)
+        table.raise_for_status()
+    except requests.exceptions.HTTPError as err:
+        print(err)
+    try:
+        keys = [row['id'] for row in response.json()]
+    except KeyError:
+        try:
+            keys = [row['name'] for row in response.json()]
+        except KeyError as err:
+            print(err)
+            print("This table has no 'id' or 'name' column.")
+    return np.array(keys)
+
+# Downloads the requested json file and returns the file names as a numpy array
+# Only works if there is a column called 'file'
+def get_filenames(url='http://localhost:8000/api/candidates/', param=None):
+    try:
+        table = my_session.get(url, params=param)
+        table.raise_for_status()
+    except requests.exceptions.HTTPError as err:
+        print(err)
+    try:
+        filenames = [row['file'] for row in response.json()]
+    except KeyError as err:
+        print(err)
+        print("This table has no 'file' column.")
+    return np.array(filenames)
+
+# Checks if a MlTrainingSetCollection exists
+def check_collection_existence(name):
+    if name in set_collections:
+        return True
+    elif name == "":
+        return False
+    else:
+        print(f"The name {name} doesn't match an existing MlTrainingSetCollection")
+        return False
+
+# Checks if the required files have been downloaded/extracted
+def check_file(pfd_name):
+    if not len(glob(path_to_data + pfd_name[:-4] + '*')) == N_FEATURES:
+        print(f"Warning: Missing files for {pfd_name[:-4]}.")
+        return False
+    else:
+        return True
+
+# Executes the file checks in parallel (threads)
+# Returns a mask for the files that exist
+def parallel_file_check(file_list):
+    successes []
+    with cf.ThreadPoolExecutor(NUM_CPUS) as executor:
+        for result in executor.map(check_file, file_list):
+            successes.append(result)
+    total_time = time() - start
+    return successes   
+
+
+########## Get Filenames and Labels ##########
+
+# Get the list of all MlTrainingSetCollection names
+set_collections = get_keys('http://localhost:8000/api/ml-training-set-collections/')
+
+# Ensure that the requested MlTrainingSetCollection exists
+exists = check_collection_existence(collection_name)
+while not exists:
+    collection_name = input("Enter the name of the MlTrainingSetCollection to download: ")
+    exists = check_collection_existence(collection_name)
+
+# Get the MlTrainingSetTypes associated with the MlTrainingSetCollection
+URL = f'http://localhost:8000/api/ml-training-set-types/?collection={collection_name}'
+set_types = get_dataframe(URL)
+
+# Get the filenames for all the Candidates in each MlTrainingSetType
+# Check that all required files have been downloaded/extracted (otherwise exit)
+num_of_sets = 0
+start = time()
+for set_type in set_types:
+    if set_type['type'] == "TRAINING PULSARS":
+        URL = f'http://localhost:8000/api/candidates/?ml-training-sets__types={set_type['id']}'
+        training_pulsars = get_filenames(URL)
+        file_successes = parallel_file_check(training_pulsars)
+        num_file_failures = np.count_nonzero(file_successes=False)
+        num_of_sets += 1
+        if num_file_failures != 0:
+            print(f"Warning: Files not found for {num_file_failures} candidates in the TRAINING PULSARS set.")
+            sys.exit()
+    elif set_type['type'] == "TRAINING NOISE":
+        URL = f'http://localhost:8000/api/candidates/?ml-training-sets__types={set_type['id']}'
+        training_noise = get_filenames(URL)
+        file_successes = parallel_file_check(training_noise)
+        num_file_failures = np.count_nonzero(file_successes=False)
+        num_of_sets += 1
+        if num_file_failures != 0:
+            print(f"Warning: Files not found for {num_file_failures} candidates in the TRAINING NOISE set.")
+            sys.exit()
+    elif set_type['type'] == "TRAINING RFI":
+        URL = f'http://localhost:8000/api/candidates/?ml-training-sets__types={set_type['id']}'
+        training_RFI = get_filenames(URL)
+        file_successes = parallel_file_check(training_RFI)
+        num_file_failures = np.count_nonzero(file_successes=False)
+        num_of_sets += 1
+        if num_file_failures != 0:
+            print(f"Warning: Files not found for {num_file_failures} candidates in the TRAINING RFI set.")
+            sys.exit()
+    elif set_type['type'] == "VALIDATION PULSARS":
+        URL = f'http://localhost:8000/api/candidates/?ml-training-sets__types={set_type['id']}'
+        validation_pulsars = get_filenames(URL)
+        file_successes = parallel_file_check(validation_pulsars)
+        num_file_failures = np.count_nonzero(file_successes=False)
+        num_of_sets += 1
+        if num_file_failures != 0:
+            print(f"Warning: Files not found for {num_file_failures} candidates in the VALIDATION PULSARS set.")
+            sys.exit()
+    elif set_type['type'] == "VALIDATION NOISE":
+        URL = f'http://localhost:8000/api/candidates/?ml-training-sets__types={set_type['id']}'
+        validation_noise = get_filenames(URL)
+        file_successes = parallel_file_check(validation_noise)
+        num_file_failures = np.count_nonzero(file_successes=False)
+        num_of_sets += 1
+        if num_file_failures != 0:
+            print(f"Warning: Files not found for {num_file_failures} candidates in the VALIDATION NOISE set.")
+            sys.exit()
+    elif set_type['type'] == "VALIDATION RFI":
+        URL = f'http://localhost:8000/api/candidates/?ml-training-sets__types={set_type['id']}'
+        validation_RFI = get_filenames(URL)
+        file_successes = parallel_file_check(validation_RFI)
+        num_file_failures = np.count_nonzero(file_successes=False)
+        num_of_sets += 1
+        if num_file_failures != 0:
+            print(f"Warning: Files not found for {num_file_failures} candidates in the VALIDATION RFI set.")
+            sys.exit()
+    elif set_type['type'] == "UNLABELLED":
+        URL = f'http://localhost:8000/api/candidates/?ml-training-sets__types={set_type['id']}'
+        unlabelled_cands = get_filenames(URL)
+        file_successes = parallel_file_check(unlabelled_cands)
+        num_file_failures = np.count_nonzero(file_successes=False)
+        num_of_sets += 1
+        if num_file_failures != 0:
+            print(f"Warning: Files not found for {num_file_failures} candidates in the UNLABELLED set.")
+            sys.exit()
+# Check that the required number of sets were found
+if num_of_sets != 7:
+    print(f"Warning: One or more MlTrainingSets are missing from this MlTrainingSetCollection (expected 7, found {num_of_sets}).")
+    sys.exit()
+# Print the time taken to do the above steps
+total_time = time() - start
+print(f"Time taken to get filenames and check file existence: {total_time}")
+
+# Create the combined training and validation sets (unlabelled set already done)
+training_files = path_to_data + training_pulsars.append(training_noise.append(training_RFI))
+validation_files = path_to_data + validation_pulsars.append(validation_noise.append(validation_RFI))
+unlabelled_files = path_to_data + unlabelled_cands
+
+# Create the lables for each combined set
+training_lables = np.tile(1, len(training_pulsars)) + np.tile(0, len(training_noise)+len(training_RFI))
+validation_lables = np.tile(1, len(validation_pulsars)) + np.tile(0, len(validation_noise)+len(validation_RFI))
 unlabelled_lables = np.tile(-1, len(unlabelled_files))
 
-# Print the number of each type of candidate in the labelled training set
-print('Note: Labels 1, 0, and -1 represent pulsars, non-pulsars, and unlabelled candidates respectively.')
-print('These counts are for the labelled training set only:')
-labels, counts = np.unique(training_labels, return_counts = True)
-for label, count in zip(labels, counts):
-    print(f'The number of candidates with label {label} is {count}')
+
+########## Prepare Training Data ##########
 
 ''' Prepare the labelled training data for use by the neural nets '''
 
@@ -124,7 +286,7 @@ time_phase_data = np.array([np.interp(a, (a.min(), a.max()), (-1, +1)) for a in 
 
 print('Labelled training data loaded')
 
-''' Repeat above steps for validation data'''
+''' Repeat for the validation data '''
 
 dm_curve_validation_combined_array = [np.load(filename[:-4] + '_dm_curve.npy') for filename in validation_files]
 pulse_profile_validation_combined_array = [np.load(filename[:-4] + '_pulse_profile.npy') for filename in validation_files]
@@ -143,7 +305,7 @@ time_phase_validation_data = np.array([np.interp(a, (a.min(), a.max()), (-1, +1)
 
 print('Validation data loaded')
 
-''' Repeat above steps for unlabelled data '''
+''' Repeat for the unlabelled training data '''
 
 dm_curve_unlabelled_combined_array = [np.load(filename[:-4] + '_dm_curve.npy') for filename in unlabelled_files]
 pulse_profile_unlabelled_combined_array = [np.load(filename[:-4] + '_pulse_profile.npy') for filename in unlabelled_files]
@@ -160,10 +322,10 @@ pulse_profile_unlabelled_data = np.array([np.interp(a, (a.min(), a.max()), (-1, 
 freq_phase_unlabelled_data = np.array([np.interp(a, (a.min(), a.max()), (-1, +1)) for a in reshaped_freq_phase_unlabelled])
 time_phase_unlabelled_data = np.array([np.interp(a, (a.min(), a.max()), (-1, +1)) for a in reshaped_time_phase_unlabelled])
 
-print('Unlabelled data loaded')
+print('Unlabelled training data loaded')
 
 
-''' Train the models '''
+########## Train the Models ##########
 
 # The learning rates can be fine-tuned
 learning_rate_discriminator = [0.0008, 0.001, 0.0002, 0.0002] 
@@ -227,7 +389,7 @@ print('Time-Phase Model Retraining has been completed')
 print(f'Time = {end-start:.3f} seconds')
 
 
-''' Make predictions '''
+########## Make Predictions ##########
 
 # Load the best of the models
 dm_curve_model = load_model(path_to_models + 'MWA_best_retrained_models/dm_curve_best_discriminator_model.h5')
@@ -241,7 +403,7 @@ predictions_pulse_profile = pulse_profile_model.predict([pulse_profile_data])
 predictions_freq_phase = freq_phase_model.predict([freq_phase_data])
 predictions_time_phase = time_phase_model.predict([time_phase_data])
 
-# Process the predictions into numerical scores
+# Process the predictions into numerical scores:
 
 predictions_dm_curve = np.rint(predictions_dm_curve)
 predictions_dm_curve = np.argmax(predictions_dm_curve, axis=1)
@@ -268,5 +430,11 @@ model.fit(stacked_results, training_labels)
 pickle.dump(model, open(path_to_models + 'MWA_best_retrained_models/sgan_retrained.pkl', 'wb'))
 
 # logistic_model = pickle.load(open(path_to_models + 'MWA_best_retrained_models/sgan_retrained.pkl', 'rb'))
+
+
+########## Make Database Objects ##########
+
+
+
 
 print("All done!")

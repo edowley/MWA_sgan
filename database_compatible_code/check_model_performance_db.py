@@ -1,9 +1,7 @@
 ###############################################################################
 #
-# Database-compatible version (WIP). 
-#
-# This file contains code that will measure the performance of models against
-# a labelled validation set.
+# This file contains code that will measure the performance of a Model against
+# the validation sets of a particular MlTrainingSetCollection.
 # 
 #       1. This description,
 #          has not been written yet.
@@ -30,20 +28,22 @@ def dir_path(string):
 
 
 parser = argparse.ArgumentParser(description='Score pfd files based on the retrained SGAN model and calculate performance against a test-set')
-parser.add_argument('-c', '--candidates_path', help='Absolute path of directory containing candidate data', default='/data/SGAN_Test_Data/candidates/')
-parser.add_argument('-l', '--label_file_name', help='Absolute path of the label csv file for the test set',  default='/data/SGAN_Test_Data/labels/true_labels.csv')
-parser.add_argument('-m', '--models_path', help='Absolute path of directory containing models',  default='/data/SGAN_Test_Data/models/')
+parser.add_argument('-d', '--data_directory', help='Absolute path of the data directory (contains the candidates/ and models/ subdirectories)', default='/data/SGAN_Test_Data/')
+parser.add_argument('-n', '--collection_name', help='Name of the MlTrainingSetCollection to download', default="")
 parser.add_argument('-r', '--regression', help='Give a regression score instead of a classification score',  default=False)
 
 args = parser.parse_args()
-path_to_data = args.candidates_path
-label_file_name = args.label_file_name
-path_to_models = args.models_path
+path_to_data = args.data_directory
+path_to_models = path_to_data + 'models/'
+collection_name = args.collection_name
 regression = args.regression
 
-dir_path(path_to_data)
-os.path.isfile(label_file_name)
+dir_path(path_to_data + 'candidates/')
 dir_path(path_to_models)
+
+
+# Get candidates and labels the same way as retrain_sgan but only the validation sets 
+
 
 # Read test set labels file
 test_set = pd.read_csv(label_file_name, header = 0, index_col = 0, \

@@ -30,7 +30,6 @@ from time import time
 from ubc_AI.training import pfddata
 from urllib.request import urlretrieve
 
-
 # Constants
 DATABASE_URL = 'https://apps.datacentral.org.au/smart/media/'
 NUM_CPUS = cpu_count()
@@ -166,8 +165,8 @@ def parallel_extraction(extraction_list):
     print(f"Extraction time: {total_time}")
     return successes
 
-########## End of Function Definitions ##########
 
+########## Download Candidate Files ##########
 
 # Get the list of all MlTrainingSetCollection names
 set_collections = get_keys('http://localhost:8000/api/ml-training-set-collections/')
@@ -179,7 +178,7 @@ while not exists:
     exists = check_collection_existence(collection_name)
 
 # Get the names of the MlTrainingSets associated with the MlTrainingSetCollection
-URL = f'http://localhost:8000/api/ml-training-sets/?type__collection={collection_name}'
+URL = f'http://localhost:8000/api/ml-training-sets/?types__collections={collection_name}'
 training_sets = get_keys(URL)
 num_of_sets = len(training_sets)
 
@@ -188,7 +187,7 @@ num_failed_extractions = []
 # Download and extract the data for all Candidates associated with each MlTrainingSet
 for i in range(num_of_sets):
     print(f"Starting work on set {i}/{num_of_sets}, {training_sets[i]}.")
-    URL = f'http://localhost:8000/api/candidates/?ml_training_set={training_sets[i]}&file='
+    URL = f'http://localhost:8000/api/candidates/?ml_training_sets={training_sets[i]}'
     candidates = get_dataframe(URL)
     list_of_pfd_paths = candidates['file'].values
     # Download the pfd files and keep track of failed downloads

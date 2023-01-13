@@ -201,7 +201,7 @@ while not valid:
     set_collection_name = input("Enter a name for the MlTrainingSetCollection: ")
     valid = check_name_validity(set_collection_name)
 
-'''MlTrainingSets'''
+''' MlTrainingSets '''
 
 # The names of the new MlTrainingSets
 set_type_suffixes = ["_tp", "_tn", "_tr", "_vp", "_vn", "_vr", "_u"]
@@ -225,7 +225,7 @@ my_session.post('http://localhost:8000/api/ml-training-sets/', json=validation_n
 my_session.post('http://localhost:8000/api/ml-training-sets/', json=validation_RFI)
 my_session.post('http://localhost:8000/api/ml-training-sets/', json=unlabelled_training)
 
-'''MlTrainingSetTypes'''
+''' MlTrainingSetTypes '''
 
 # Create the MlTrainingSetTypes
 tp_type = create_Ml_Training_Set_Type(set_names[0], "TRAINING PULSARS")
@@ -245,7 +245,7 @@ vn_id = my_session.post('http://localhost:8000/api/ml-training-set-types/', json
 vr_id = my_session.post('http://localhost:8000/api/ml-training-set-types/', json=vr_type).json['id']
 u_id = my_session.post('http://localhost:8000/api/ml-training-set-types/', json=u_type).json['id']
 
-'''MlTrainingSetCollection'''
+''' MlTrainingSetCollection '''
 
 # The list of ids of the MlTrainingSetTypes in this collection
 set_types_list = [tp_id, tn_id, tr_id, vp_id, vn_id, vr_id, u_id]
