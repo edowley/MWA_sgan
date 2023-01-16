@@ -29,7 +29,7 @@ import argparse
 import json
 from math import floor
 import numpy as np
-import os
+import sys
 import pandas as pd
 import requests
 
@@ -77,10 +77,10 @@ def get_keys(url='http://localhost:8000/api/candidates/', param=None):
     except requests.exceptions.HTTPError as err:
         print(err)
     try:
-        keys = [row['id'] for row in response.json()]
+        keys = [row['id'] for row in table.json()]
     except KeyError:
         try:
-            keys = [row['name'] for row in response.json()]
+            keys = [row['name'] for row in table.json()]
         except KeyError as err:
             print(err)
             print("This table has no 'id' or 'name' column.")
@@ -96,27 +96,6 @@ def check_name_validity(name):
     else:
         return True
 
-# Creates the json file for a new MlTrainingSet
-def create_Ml_Training_Set(name, candidates):
-    data = {}
-    data['name'] = name
-    data['candidates'] = candidates
-    return json.dumps(data)
-
-# Creates the json file for a new MlTrainingSetType
-def create_Ml_Training_Set_Type(training_set, label):
-    data = {}
-    data['ml_training_set'] = training_set
-    data['type'] = label
-    return json.dumps(data)
-
-# Creates the json file for a new MlTrainingSetCollection
-def create_Ml_Training_Set_Collection(name, set_types):
-    data = {}
-    data['name'] = name
-    data['ml_training_set_types'] = set_types
-    return json.dumps(data)
-
 
 ########## Candidate Selection ##########
 
@@ -127,22 +106,22 @@ def create_Ml_Training_Set_Collection(name, set_types):
 URL = 'http://localhost:8000/api/candidates/?file='
 
 # Get array of pulsar candidates (avg rating >= 4, no RFI)
-PARAMS = {'ml_ready_pulsars': True, 'avg_rating__gte': 4, 'rfi': False}
+PARAMS = {'ml_ready_pulsars': 1, 'avg_rating__gte': 4, 'ratings__rfi': 0}
 all_pulsars = get_keys(URL, PARAMS)
 
 # Get array of noise candidates (avg rating <= 2, no RFI)
-PARAMS = {'ml_ready_pulsars': True, 'avg_rating__lte': 2, 'rfi': False}
+PARAMS = {'avg_rating__lte': 2, 'ratings__rfi': 0}
 all_noise = get_keys(URL, PARAMS)
 
 # Get array of RFI candidates (avg rating <= 2, RFI)
-PARAMS = {'ml_ready_pulsars': True, 'avg_rating__lte': 2, 'rfi': True}
+PARAMS = {'avg_rating__lte': 2, 'ratings__rfi': 1}
 all_RFI = get_keys(URL, PARAMS)
 
 # Get array of all candidates
 all_cands = get_keys()
 
 ## NOTE Alternative to all_cands:
-# PARAMS = {'avg_rating__isnull': True}
+# PARAMS = {'avg_rating__isnull': 1}
 # all_unlabelled = get_keys(URL, PARAMS)
 ## Would save memory and eliminate some later steps, but...
 ## Relies on a large number of Candidates not receiving Ratings (likely)
@@ -174,7 +153,7 @@ num_validation_noise = num_noise - num_training_noise
 num_validation_RFI = num_RFI - num_training_RFI 
 
 # Filter out candidates assigned to the labelled sets from the unlabelled set
-all_unlabelled = np.setdiff1d[all_unlabelled, all_pulsars.append(all_noise.append(all_RFI)), assume_unique=True]
+all_unlabelled = np.setdiff1d(all_unlabelled, all_pulsars.append(all_noise.append(all_RFI)), assume_unique=True)
 # Randomly sample the required number of unlabelled candidates
 total_num_unlabelled = len(all_unlabelled)
 num_unlabelled = min(num_unlabelled, total_num_unlabelled)
@@ -208,16 +187,19 @@ set_type_suffixes = ["_tp", "_tn", "_tr", "_vp", "_vn", "_vr", "_u"]
 set_names = set_collection_name + set_type_suffixes
 
 # Create the MlTrainingSets
-training_pulsars = create_Ml_Training_Set(set_names[0], all_pulsars[:num_training_pulsars])
-training_noise = create_Ml_Training_Set(set_names[1], all_noise[:num_training_noise])
-training_RFI = create_Ml_Training_Set(set_names[2], all_RFI[:num_training_RFI])
-validation_pulsars = create_Ml_Training_Set(set_names[3], all_pulsars[num_training_pulsars+1:])
-validation_noise = create_Ml_Training_Set(set_names[4], all_noise[num_training_noise+1:])
-validation_RFI = create_Ml_Training_Set(set_names[5], all_RFI[num_training_RFI+1:])
-unlabelled_training = create_Ml_Training_Set(set_names[6], all_unlabelled)
+training_pulsars = {'name': set_names[0], 'candidates': all_pulsars[:num_training_pulsars]}
+training_noise = {'name': set_names[1], 'candidates': all_noise[:num_training_noise]}
+training_RFI = {'name': set_names[2], 'candidates': all_RFI[:num_training_RFI]}
+validation_pulsars = {'name': set_names[3], 'candidates': all_pulsars[num_training_pulsars+1:]}
+validation_noise = {'name': set_names[4], 'candidates': all_noise[num_training_noise+1:]}
+validation_RFI = {'name': set_names[5], 'candidates': all_RFI[num_training_RFI+1:]}
+unlabelled_training = {'name': set_names[6], 'candidates': all_unlabelled}
 
 # Post the MlTrainingSets
-my_session.post('http://localhost:8000/api/ml-training-sets/', json=training_pulsars)
+iddd = my_session.post('http://localhost:8000/api/ml-training-sets/', json=training_pulsars).json()
+print(iddd)
+print(iddd[0]['name'])
+sys.exit()
 my_session.post('http://localhost:8000/api/ml-training-sets/', json=training_noise)
 my_session.post('http://localhost:8000/api/ml-training-sets/', json=training_RFI)
 my_session.post('http://localhost:8000/api/ml-training-sets/', json=validation_pulsars)
@@ -228,22 +210,22 @@ my_session.post('http://localhost:8000/api/ml-training-sets/', json=unlabelled_t
 ''' MlTrainingSetTypes '''
 
 # Create the MlTrainingSetTypes
-tp_type = create_Ml_Training_Set_Type(set_names[0], "TRAINING PULSARS")
-tn_type = create_Ml_Training_Set_Type(set_names[1], "TRAINING NOISE")
-tr_type = create_Ml_Training_Set_Type(set_names[2], "TRAINING RFI")
-vp_type = create_Ml_Training_Set_Type(set_names[3], "VALIDATION PULSARS")
-vn_type = create_Ml_Training_Set_Type(set_names[4], "VALIDATION NOISE")
-vr_type = create_Ml_Training_Set_Type(set_names[5], "VALIDATION RFI")
-u_type = create_Ml_Training_Set_Type(set_names[6], "UNLABELLED")
+tp_type = {'ml_training_set': set_names[0], 'type': "TRAINING PULSARS"}
+tn_type = {'ml_training_set': set_names[1], 'type': "TRAINING NOISE"}
+tr_type = {'ml_training_set': set_names[2], 'type': "TRAINING RFI"}
+vp_type = {'ml_training_set': set_names[3], 'type': "VALIDATION PULSARS"}
+vn_type = {'ml_training_set': set_names[4], 'type': "VALIDATION NOISE"}
+vr_type = {'ml_training_set': set_names[5], 'type': "VALIDATION RFI"}
+u_type = {'ml_training_set': set_names[6], 'type': "UNLABELLED"}
 
 # Post the MlTrainingSetTypes and store their autoincremented ids
-tp_id = my_session.post('http://localhost:8000/api/ml-training-set-types/', json=tp_type).json['id']
-tn_id = my_session.post('http://localhost:8000/api/ml-training-set-types/', json=tn_type).json['id']
-tr_id = my_session.post('http://localhost:8000/api/ml-training-set-types/', json=tr_type).json['id']
-vp_id = my_session.post('http://localhost:8000/api/ml-training-set-types/', json=vp_type).json['id']
-vn_id = my_session.post('http://localhost:8000/api/ml-training-set-types/', json=vn_type).json['id']
-vr_id = my_session.post('http://localhost:8000/api/ml-training-set-types/', json=vr_type).json['id']
-u_id = my_session.post('http://localhost:8000/api/ml-training-set-types/', json=u_type).json['id']
+tp_id = my_session.post('http://localhost:8000/api/ml-training-set-types/', json=tp_type).json()[0]['id']
+tn_id = my_session.post('http://localhost:8000/api/ml-training-set-types/', json=tn_type).json()[0]['id']
+tr_id = my_session.post('http://localhost:8000/api/ml-training-set-types/', json=tr_type).json()[0]['id']
+vp_id = my_session.post('http://localhost:8000/api/ml-training-set-types/', json=vp_type).json()[0]['id']
+vn_id = my_session.post('http://localhost:8000/api/ml-training-set-types/', json=vn_type).json()[0]['id']
+vr_id = my_session.post('http://localhost:8000/api/ml-training-set-types/', json=vr_type).json()[0]['id']
+u_id = my_session.post('http://localhost:8000/api/ml-training-set-types/', json=u_type).json()[0]['id']
 
 ''' MlTrainingSetCollection '''
 
@@ -251,7 +233,7 @@ u_id = my_session.post('http://localhost:8000/api/ml-training-set-types/', json=
 set_types_list = [tp_id, tn_id, tr_id, vp_id, vn_id, vr_id, u_id]
 
 # Create and Post the MlTrainingSetCollection
-finished_collection = create_MlTraining_Set_Collection(collection_name, set_types_list)
+finished_collection = {'name': collection_name, 'ml_training_set_types': set_types_list}
 my_session.post('http://localhost:8000/api/ml-training-set-collections/', json=finished_collection)
 
 

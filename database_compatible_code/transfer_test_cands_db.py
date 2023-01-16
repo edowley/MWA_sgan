@@ -69,7 +69,8 @@ def parallel_download(download_list):
 
 
 pfd_names = database_df['Pfd path'].to_numpy()
-parallel_download(pfd_names)
+# NOTE already done
+# parallel_download(pfd_names)
 
 
 ########## New Database Stuff ##########
@@ -91,11 +92,9 @@ my_session.auth = TokenAuth("fagkjfasbnlvasfdfwjf783YDF")
 # Creates and posts a new Candidate, returns the autoincremented id
 def create_Candidate(filename):
     with open(path_to_data + filename, 'rb') as f:
-        data = {}
-        data['beam'] = 376
-        data['file'] = f
-        my_json = json.dumps(data, indent=4)
-        candidate_json = my_session.post('http://localhost:8000/api/candidates/', json=my_json).json()
+        my_data = {'beam': 376}
+        my_files = {'file': f}
+        candidate_json = my_session.post('http://localhost:8000/api/candidates/', data=my_data, files=my_files).json()
     return candidate_json['id']
 
 # Creates the Candidates in parallel (threads)
@@ -109,19 +108,52 @@ def parallel_Candidates(file_list):
     print(f"Candidate creation and upload time: {total_time}")
     return candidate_ids
 
-candidate_ids = parallel_Candidates(pfd_names)
+# NOTE already done
+# candidate_ids = parallel_Candidates(pfd_names)
 
+########## Retrieve ids (undesirable method) ##########
+
+candidate_ids = []
+for pfd in pfd_names:
+    my_json = my_session.get(f'http://localhost:8000/api/candidates/?file=candidates/{pfd}').json()
+    candidate_ids.append(my_json[0]['id'])
+
+'''
+def get_id(pfd_name):
+    my_json = my_session.get(f'http://localhost:8000/api/candidates/?file=candidates/{pfd_name}').json()
+    return my_json['id']
+
+def parallel_ids(pfd_list):
+    candidate_ids = []
+    with cf.ThreadPoolExecutor(NUM_CPUS) as executor:
+        for result in executor.map(get_id, pfd_list):
+            candidate_ids.append(result)
+    total_time = time() - start
+    print(f"Candidate id retrieval time: {total_time}")
+    return candidate_ids
+
+candidate_ids = parallel_ids(pfd_names)
+'''
+
+##########   ##########
 
 # Create dataframe for the new Ratings
-ratings_df = pd.dataframe()
+ratings_df = pd.DataFrame()
 ratings_df['candidate'] = candidate_ids
-ratings_df['rating'] = round(database_df['Avg rating'])
+ratings_df['rating'] = np.round(database_df['Avg rating'].to_numpy(dtype=float))
 ratings_df['user'] = 'edowley'
-RFI_mask = np.char.find(database_df['Notes'].to_numpy(dtype = 'U'), 'RFI') != -1
+RFI_mask = np.char.find(database_df['Notes'].to_numpy(dtype='U'), 'RFI') != -1
 ratings_df['rfi'] = RFI_mask
 
+ratings_df = ratings_df[~ratings_df['rating'].isnull()]
+ratings_df['rating'] = ratings_df['rating'].astype(int)
+
+ratings_json = ratings_df.to_dict(orient='records')
+
+print(ratings_json)
+
 # Post the new Ratings
-my_session.post('http://localhost:8000/api/ratings/', json=ratings_df.to_json())
+my_session.post('http://localhost:8000/api/ratings/', json=ratings_json)
 
 my_session.close()
 

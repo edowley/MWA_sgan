@@ -107,10 +107,10 @@ def get_keys(url='http://localhost:8000/api/candidates/', param=None):
     except requests.exceptions.HTTPError as err:
         print(err)
     try:
-        keys = [row['id'] for row in response.json()]
+        keys = [row['id'] for row in table.json()]
     except KeyError:
         try:
-            keys = [row['name'] for row in response.json()]
+            keys = [row['name'] for row in table.json()]
         except KeyError as err:
             print(err)
             print("This table has no 'id' or 'name' column.")
@@ -125,7 +125,7 @@ def get_filenames(url='http://localhost:8000/api/candidates/', param=None):
     except requests.exceptions.HTTPError as err:
         print(err)
     try:
-        filenames = [row['file'] for row in response.json()]
+        filenames = [row['file'] for row in table.json()]
     except KeyError as err:
         print(err)
         print("This table has no 'file' column.")
