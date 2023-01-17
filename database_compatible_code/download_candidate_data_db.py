@@ -169,7 +169,7 @@ def parallel_extraction(extraction_list):
 ########## Download Candidate Files ##########
 
 # Get the list of all MlTrainingSetCollection names
-set_collections = get_keys('http://localhost:8000/api/ml-training-set-collections/')
+set_collections = get_keys('http://localhost:8000/api/ml_training_set_collections/')
 
 # Ensure that the requested MlTrainingSetCollection exists
 exists = check_collection_existence(collection_name)
@@ -178,7 +178,7 @@ while not exists:
     exists = check_collection_existence(collection_name)
 
 # Get the names of the MlTrainingSets associated with the MlTrainingSetCollection
-URL = f'http://localhost:8000/api/ml-training-sets/?types__collections={collection_name}'
+URL = f'http://localhost:8000/api/ml_training_sets/?types__collections={collection_name}'
 training_sets = get_keys(URL)
 num_of_sets = len(training_sets)
 

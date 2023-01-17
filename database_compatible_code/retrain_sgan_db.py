@@ -163,7 +163,7 @@ def parallel_file_check(file_list):
 ########## Get Filenames and Labels ##########
 
 # Get the list of all MlTrainingSetCollection names
-set_collections = get_keys('http://localhost:8000/api/ml-training-set-collections/')
+set_collections = get_keys('http://localhost:8000/api/ml_training_set_collections/')
 
 # Ensure that the requested MlTrainingSetCollection exists
 exists = check_collection_existence(collection_name)
@@ -172,7 +172,7 @@ while not exists:
     exists = check_collection_existence(collection_name)
 
 # Get the MlTrainingSetTypes associated with the MlTrainingSetCollection
-URL = f'http://localhost:8000/api/ml-training-set-types/?collection={collection_name}'
+URL = f'http://localhost:8000/api/ml_training_set_types/?collection={collection_name}'
 set_types = get_dataframe(URL)
 
 # Get the filenames for all the Candidates in each MlTrainingSetType
