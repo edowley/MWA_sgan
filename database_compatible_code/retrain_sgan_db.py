@@ -33,6 +33,8 @@ from time import time
 # Constants
 NUM_CPUS = cpu_count()
 N_FEATURES = 4
+SMART_BASE_URL = os.environ.get('SMART_BASE_URL', 'http://localhost:8000/api/')
+SMART_TOKEN = os.environ.get('SMART_TOKEN', 'fagkjfasbnlvasfdfwjf783YDF')
 
 class NotADirectoryError(Exception):
     pass
@@ -43,25 +45,25 @@ def dir_path(string):
     else:
         raise NotADirectoryError("Directory path is not valid.")
 
-'''
-# Class Labels
-1 -> Pulsar
-0 -> Non-Pulsar
--1 -> Unlabelled Candidate
-'''
 # Parse arguments
-parser = argparse.ArgumentParser(description='Re-train SGAN machine learning model using files sourced by get_data.py')
+parser = argparse.ArgumentParser(description='Retrain SGAN model using files from download_candidate_data_db.py')
 parser.add_argument('-d', '--data_directory', help='Absolute path of the data directory (contains the candidates/ and models/ subdirectories)', default='/data/SGAN_Test_Data/')
 parser.add_argument('-n', '--collection_name', help='Name of the MlTrainingSetCollection to download', default="")
+parser.add_argument('-m', '--model_name', help='Name to save the retrained models under', default="")
 parser.add_argument('-b', '--batch_size', help='No. of pfd files that will be read in one batch', default='16', type=int)
 parser.add_argument('-e', '--num_epochs', help='No. of epochs to train', default='20', type=int)
+parser.add_argument('-l', '--base_url', help='Base URL for the database', default=SMART_BASE_URL)
+parser.add_argument('-t', '--token', help='Authorization token for the database', default=SMART_TOKEN)
 
 args = parser.parse_args()
 path_to_data = args.data_directory
 path_to_models = path_to_data + 'models/'
 collection_name = args.collection_name
+model_name = args.model_name
 batch_size = args.batch_size
 num_epochs = args.num_epochs
+base_url = args.base_url
+token = args.token
 
 # Check that the specified input and output directories exist
 dir_path(path_to_data + 'candidates/')
@@ -70,8 +72,7 @@ os.makedirs(path_to_models, exist_ok=True)
 # Check that the output subdirectories exist
 os.makedirs(path_to_models + 'training_logs/', exist_ok=True)
 os.makedirs(path_to_models + 'intermediate_models/', exist_ok=True)
-os.makedirs(path_to_models + 'MWA_best_retrained_models/', exist_ok=True)
-
+os.makedirs(path_to_models + 'best_retrained_models/', exist_ok=True)
 
 # Database token
 class TokenAuth(requests.auth.AuthBase):
@@ -84,13 +85,13 @@ class TokenAuth(requests.auth.AuthBase):
 
 # Start authorised session
 my_session = requests.session()
-my_session.auth = TokenAuth("fagkjfasbnlvasfdfwjf783YDF")
+my_session.auth = TokenAuth(token)
 
 
 ########## Function Definitions ##########
 
 # Downloads the requested json file and returns it as a pandas dataframe
-def get_dataframe(url='http://localhost:8000/api/candidates/', param=None):
+def get_dataframe(url=f'{base_url}candidates/', param=None):
     try:
         table = my_session.get(url, params=param)
         table.raise_for_status()
@@ -100,7 +101,7 @@ def get_dataframe(url='http://localhost:8000/api/candidates/', param=None):
 
 # Downloads the requested json file and returns the primary keys as a numpy array
 # Only works if the pk column is called 'id' or 'name'
-def get_keys(url='http://localhost:8000/api/candidates/', param=None):
+def get_keys(url=f'{base_url}candidates/', param=None):
     try:
         table = my_session.get(url, params=param)
         table.raise_for_status()
@@ -118,7 +119,7 @@ def get_keys(url='http://localhost:8000/api/candidates/', param=None):
 
 # Downloads the requested json file and returns the file names as a numpy array
 # Only works if there is a column called 'file'
-def get_filenames(url='http://localhost:8000/api/candidates/', param=None):
+def get_filenames(url=f'{base_url}candidates/', param=None):
     try:
         table = my_session.get(url, params=param)
         table.raise_for_status()
@@ -130,6 +131,16 @@ def get_filenames(url='http://localhost:8000/api/candidates/', param=None):
         print(err)
         print("This table has no 'file' column.")
     return np.array(filenames)
+
+# Checks if a model name is valid
+def check_name_validity(name):
+    if name == "":
+        return False
+    elif name in algorithm_setting_names:
+        print(f"The name {name} is already in use")
+        return False
+    else:
+        return True
 
 # Checks if a MlTrainingSetCollection exists
 def check_collection_existence(name):
@@ -163,7 +174,7 @@ def parallel_file_check(file_list):
 ########## Get Filenames and Labels ##########
 
 # Get the list of all MlTrainingSetCollection names
-set_collections = get_keys('http://localhost:8000/api/ml_training_set_collections/')
+set_collections = get_keys(f'{base_url}ml_training_set_collections/')
 
 # Ensure that the requested MlTrainingSetCollection exists
 exists = check_collection_existence(collection_name)
@@ -171,8 +182,18 @@ while not exists:
     collection_name = input("Enter the name of the MlTrainingSetCollection to download: ")
     exists = check_collection_existence(collection_name)
 
+# Get the list of all AlgorithmSettings
+algorithm_settings = get_dataframe(f'{base_url}algorithm_settings/')
+algorithm_setting_names = ????? # 'value' or 'description'? Probably 'value'
+
+# Ensure that the chosen AlgorithmSettings name is valid
+valid = check_name_validity(model_name)
+while not valid:
+    model_name = input("Enter a name for the retrained models: ")
+    valid = check_name_validity(model_name)
+
 # Get the MlTrainingSetTypes associated with the MlTrainingSetCollection
-URL = f'http://localhost:8000/api/ml_training_set_types/?collection={collection_name}'
+URL = f'{base_url}ml_training_set_types/?collection={collection_name}'
 set_types = get_dataframe(URL)
 
 # Get the filenames for all the Candidates in each MlTrainingSetType
@@ -180,8 +201,9 @@ set_types = get_dataframe(URL)
 num_of_sets = 0
 start = time()
 for set_type in set_types:
+    URL = f'{base_url}candidates/?ml_training_sets__types={set_type['id']}'
+    # Check files for training pulsars
     if set_type['type'] == "TRAINING PULSARS":
-        URL = f'http://localhost:8000/api/candidates/?ml-training-sets__types={set_type['id']}'
         training_pulsars = get_filenames(URL)
         file_successes = parallel_file_check(training_pulsars)
         num_file_failures = np.count_nonzero(file_successes=False)
@@ -189,8 +211,8 @@ for set_type in set_types:
         if num_file_failures != 0:
             print(f"Warning: Files not found for {num_file_failures} candidates in the TRAINING PULSARS set.")
             sys.exit()
+    # Check files for training noise
     elif set_type['type'] == "TRAINING NOISE":
-        URL = f'http://localhost:8000/api/candidates/?ml-training-sets__types={set_type['id']}'
         training_noise = get_filenames(URL)
         file_successes = parallel_file_check(training_noise)
         num_file_failures = np.count_nonzero(file_successes=False)
@@ -198,8 +220,8 @@ for set_type in set_types:
         if num_file_failures != 0:
             print(f"Warning: Files not found for {num_file_failures} candidates in the TRAINING NOISE set.")
             sys.exit()
+    # Check files for training RFI
     elif set_type['type'] == "TRAINING RFI":
-        URL = f'http://localhost:8000/api/candidates/?ml-training-sets__types={set_type['id']}'
         training_RFI = get_filenames(URL)
         file_successes = parallel_file_check(training_RFI)
         num_file_failures = np.count_nonzero(file_successes=False)
@@ -207,8 +229,8 @@ for set_type in set_types:
         if num_file_failures != 0:
             print(f"Warning: Files not found for {num_file_failures} candidates in the TRAINING RFI set.")
             sys.exit()
+    # Check files for validation pulsars
     elif set_type['type'] == "VALIDATION PULSARS":
-        URL = f'http://localhost:8000/api/candidates/?ml-training-sets__types={set_type['id']}'
         validation_pulsars = get_filenames(URL)
         file_successes = parallel_file_check(validation_pulsars)
         num_file_failures = np.count_nonzero(file_successes=False)
@@ -216,8 +238,8 @@ for set_type in set_types:
         if num_file_failures != 0:
             print(f"Warning: Files not found for {num_file_failures} candidates in the VALIDATION PULSARS set.")
             sys.exit()
+    # Check files for validation noise
     elif set_type['type'] == "VALIDATION NOISE":
-        URL = f'http://localhost:8000/api/candidates/?ml-training-sets__types={set_type['id']}'
         validation_noise = get_filenames(URL)
         file_successes = parallel_file_check(validation_noise)
         num_file_failures = np.count_nonzero(file_successes=False)
@@ -225,8 +247,8 @@ for set_type in set_types:
         if num_file_failures != 0:
             print(f"Warning: Files not found for {num_file_failures} candidates in the VALIDATION NOISE set.")
             sys.exit()
+    # Check files for validation RFI
     elif set_type['type'] == "VALIDATION RFI":
-        URL = f'http://localhost:8000/api/candidates/?ml-training-sets__types={set_type['id']}'
         validation_RFI = get_filenames(URL)
         file_successes = parallel_file_check(validation_RFI)
         num_file_failures = np.count_nonzero(file_successes=False)
@@ -234,8 +256,8 @@ for set_type in set_types:
         if num_file_failures != 0:
             print(f"Warning: Files not found for {num_file_failures} candidates in the VALIDATION RFI set.")
             sys.exit()
+    # Check files for unlabelled
     elif set_type['type'] == "UNLABELLED":
-        URL = f'http://localhost:8000/api/candidates/?ml-training-sets__types={set_type['id']}'
         unlabelled_cands = get_filenames(URL)
         file_successes = parallel_file_check(unlabelled_cands)
         num_file_failures = np.count_nonzero(file_successes=False)
@@ -392,10 +414,10 @@ print(f'Time = {end-start:.3f} seconds')
 ########## Make Predictions ##########
 
 # Load the best of the models
-dm_curve_model = load_model(path_to_models + 'MWA_best_retrained_models/dm_curve_best_discriminator_model.h5')
-pulse_profile_model = load_model(path_to_models + 'MWA_best_retrained_models/pulse_profile_best_discriminator_model.h5')
-freq_phase_model = load_model(path_to_models + 'MWA_best_retrained_models/freq_phase_best_discriminator_model.h5')
-time_phase_model = load_model(path_to_models + 'MWA_best_retrained_models/time_phase_best_discriminator_model.h5')
+dm_curve_model = load_model(path_to_models + 'best_retrained_models/dm_curve_best_discriminator_model.h5')
+pulse_profile_model = load_model(path_to_models + 'best_retrained_models/pulse_profile_best_discriminator_model.h5')
+freq_phase_model = load_model(path_to_models + 'best_retrained_models/freq_phase_best_discriminator_model.h5')
+time_phase_model = load_model(path_to_models + 'best_retrained_models/time_phase_best_discriminator_model.h5')
 
 # Make predictions
 predictions_dm_curve = dm_curve_model.predict([dm_curve_data])
@@ -421,15 +443,14 @@ predictions_time_phase = np.rint(predictions_time_phase)
 predictions_time_phase = np.argmax(predictions_time_phase, axis=1)
 predictions_time_phase = np.reshape(predictions_time_phase, len(predictions_time_phase))
 
-
 # Train the logistic regression
 model = LogisticRegression()
 stacked_results = np.stack((predictions_freq_phase, predictions_time_phase, predictions_dm_curve, predictions_pulse_profile), axis=1)
 stacked_results = np.reshape(stacked_results, (len(predictions_freq_phase), 4))
 model.fit(stacked_results, training_labels)
-pickle.dump(model, open(path_to_models + 'MWA_best_retrained_models/sgan_retrained.pkl', 'wb'))
+pickle.dump(model, open(path_to_models + 'best_retrained_models/sgan_retrained.pkl', 'wb'))
 
-# logistic_model = pickle.load(open(path_to_models + 'MWA_best_retrained_models/sgan_retrained.pkl', 'rb'))
+# logistic_model = pickle.load(open(path_to_models + 'best_retrained_models/sgan_retrained.pkl', 'rb'))
 
 
 ########## Make Database Objects ##########

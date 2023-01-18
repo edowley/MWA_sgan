@@ -19,7 +19,7 @@
 #         - Candidates associated with the same pulsar must come from different
 #           observations
 #         - Any Candidate not chosen for another set can be in the unlabelled set
-#         - Candidates must not have an empty "file" field
+#         - Candidates must not have an empty 'file' field
 #    4. The names of the new MlTrainingSets consist of the MlTrainingSetCollection
 #       name, plus a suffix indicating set type (e.g. my_collection_tp).
 #
@@ -29,28 +29,32 @@ import argparse
 import json
 from math import floor
 import numpy as np
-import sys
 import pandas as pd
 import requests
 
-# Default values
+# Constants
 DEFAULT_NUM_PULSARS = 64
 DEFAULT_NUM_UNLABELLED = 256
 DEFAULT_VALIDATION_RATIO = 0.2
+SMART_BASE_URL = os.environ.get('SMART_BASE_URL', 'http://localhost:8000/api/')
+SMART_TOKEN = os.environ.get('SMART_TOKEN', 'fagkjfasbnlvasfdfwjf783YDF')
 
 # Parse arguments
-parser = argparse.ArgumentParser(description='Download pfd files, label, and extract as numpy array files.')
+parser = argparse.ArgumentParser(description='Randomly generate MlTrainingSets/SetTypes/SetCollection.')
 parser.add_argument('-p', '--num_pulsars', help='Number of (labelled) pulsars (and non-pulsars) to use', default=DEFAULT_NUM_PULSARS, type=int)
 parser.add_argument('-u', '--num_unlabelled', help='Number of unlabelled candidates to use', default=DEFAULT_NUM_UNLABELLED, type=int)
 parser.add_argument('-v', '--validation_ratio', help='Proportion of labelled candidates to use in the validation set', default=DEFAULT_VALIDATION_RATIO, type=float)
 parser.add_argument('-x', '--set_collection_name', help='Name of the MlTrainingSetCollection', default="", type=str)
+parser.add_argument('-l', '--base_url', help='Base URL for the database', default=SMART_BASE_URL)
+parser.add_argument('-t', '--token', help='Authorization token for the database', default=SMART_TOKEN)
 
 args = parser.parse_args()
 num_pulsars = args.num_pulsars
 num_unlabelled = args.num_unlabelled
 validation_ratio = args.validation_ratio
 set_collection_name = args.set_collection_name
-
+base_url = args.base_url
+token = args.token
 
 # Database token
 class TokenAuth(requests.auth.AuthBase):
@@ -63,14 +67,14 @@ class TokenAuth(requests.auth.AuthBase):
 
 # Start authorised session
 my_session = requests.session()
-my_session.auth = TokenAuth("fagkjfasbnlvasfdfwjf783YDF")
+my_session.auth = TokenAuth(token)
 
 
 ########## Function Definitions ##########
 
 # Downloads the requested json file and returns the primary keys as a numpy array
 # Only works if the pk column is called 'id' or 'name'
-def get_keys(url='http://localhost:8000/api/candidates/', param=None):
+def get_keys(url=f'{base_url}candidates/', param=None):
     try:
         table = my_session.get(url, params=param)
         table.raise_for_status()
@@ -100,39 +104,40 @@ def check_name_validity(name):
 ########## Candidate Selection ##########
 
 # 'has_file=1' : Candidate 'file' field is not null
-URL = 'http://localhost:8000/api/candidates/?has_file=1'
+URL = f'{base_url}candidates/?has_file=1'
 
-# Get array of pulsar candidates (avg rating >= 4, no RFI)
+# Get array of ids of Candidates rated as pulsars (avg rating >= 4, no RFI)
 # 'ml_ready_pulsars=1' : no more than one Candidate per Pulsar per Observation
 # NOTE set 'ml_ready_pulsars=1' once enough Candidates have been assigned to Pulsars
 PARAMS = {'ml_ready_pulsars': 0, 'avg_rating__gte': 4, 'ratings__rfi': 0}
 all_pulsars = get_keys(URL, PARAMS)
 
-# Get array of noise candidates (avg rating <= 2, no RFI)
+# Get array of ids of Candidates rated as noise (avg rating <= 2, no RFI)
 PARAMS = {'avg_rating__lte': 2, 'ratings__rfi': 0}
 all_noise = get_keys(URL, PARAMS)
 
-# Get array of RFI candidates (avg rating <= 2, RFI)
+# Get array of ids of Candidates rated as RFI (avg rating <= 2, RFI)
 PARAMS = {'avg_rating__lte': 2, 'ratings__rfi': 1}
 all_RFI = get_keys(URL, PARAMS)
 
-# Get array of all candidates
-all_cands = get_keys()
+# Get array of all Candidate ids
+all_cands = get_keys(URL)
 
 ## NOTE Alternative to all_cands:
 # PARAMS = {'avg_rating__isnull': 1}
 # all_unlabelled = get_keys(URL, PARAMS)
-## Would save memory and eliminate some later steps, but...
-## Relies on a large number of Candidates not receiving Ratings (likely)
+## Would save time/memory and eliminate some later steps, but...
+## Relies on a large number of Candidates not receiving Ratings
 
 # The total number of each candidate type available
 total_num_pulsars = len(all_pulsars)
-print(f"Total number of pulsars: {total_num_pulsars}")
+print(f"Total number of labelled pulsars to choose from: {total_num_pulsars}")
 total_num_noise = len(all_noise)
-print(f"Total number of noise: {total_num_noise}")
+print(f"Total number of labelled noise to choose from: {total_num_noise}")
 total_num_RFI = len(all_RFI)
-print(f"Total number of RFI: {total_num_RFI}")
+print(f"Total number of labelled RFI to choose from: {total_num_RFI}")
 total_num_cands = len(all_cands)
+print(f"Total number of Candidates (including unlabelled): {total_num_cands}")
 
 # The number of each candidate type to use
 # Based on the selection rules described at the top
@@ -162,19 +167,19 @@ num_unlabelled = min(num_unlabelled, total_num_unlabelled)
 all_unlabelled = np.random.choice(all_unlabelled, size=num_unlabelled, replace=False)
 
 # Print the number of candidates in each set
-print(f"Number of training pulsar candidates: {num_training_pulsars}")
-print(f"Number of training noise candidates: {num_training_noise}")
-print(f"Number of training RFI candidates: {num_training_RFI}")
-print(f"Number of validation pulsar candidates: {num_validation_pulsars}")
-print(f"Number of validation noise candidates: {num_validation_noise}")
-print(f"Number of validation RFI candidates: {num_validation_RFI}")
-print(f"Number of unlabelled training candidates: {num_unlabelled}")
+print(f"Number of training pulsar candidates selected: {num_training_pulsars}")
+print(f"Number of training noise candidates selected: {num_training_noise}")
+print(f"Number of training RFI candidates selected: {num_training_RFI}")
+print(f"Number of validation pulsar candidates selected: {num_validation_pulsars}")
+print(f"Number of validation noise candidates selected: {num_validation_noise}")
+print(f"Number of validation RFI candidates selected: {num_validation_RFI}")
+print(f"Number of unlabelled training candidates selected: {num_unlabelled}")
 
 
 ########## Database Object Creation ##########
 
 # Get the list of all MlTrainingSetCollection names
-set_collections = get_keys('http://localhost:8000/api/ml_training_set_collections/')
+set_collections = get_keys(f'{base_url}ml_training_set_collections/')
 
 # Ensure that the chosen MlTrainingSetCollection name is valid
 valid = check_name_validity(set_collection_name)
@@ -198,13 +203,14 @@ validation_RFI = {'name': set_names[5], 'candidates': [int(x) for x in all_RFI[n
 unlabelled_training = {'name': set_names[6], 'candidates': [int(x) for x in all_unlabelled]}
 
 # Post the MlTrainingSets
-my_session.post('http://localhost:8000/api/ml_training_sets/', json=training_pulsars)
-my_session.post('http://localhost:8000/api/ml_training_sets/', json=training_noise)
-my_session.post('http://localhost:8000/api/ml_training_sets/', json=training_RFI)
-my_session.post('http://localhost:8000/api/ml_training_sets/', json=validation_pulsars)
-my_session.post('http://localhost:8000/api/ml_training_sets/', json=validation_noise)
-my_session.post('http://localhost:8000/api/ml_training_sets/', json=validation_RFI)
-my_session.post('http://localhost:8000/api/ml_training_sets/', json=unlabelled_training)
+URL = f'{base_url}ml_training_sets/'
+my_session.post(URL, json=training_pulsars)
+my_session.post(URL, json=training_noise)
+my_session.post(URL, json=training_RFI)
+my_session.post(URL, json=validation_pulsars)
+my_session.post(URL, json=validation_noise)
+my_session.post(URL, json=validation_RFI)
+my_session.post(URL, json=unlabelled_training)
 
 ''' MlTrainingSetTypes '''
 
@@ -218,13 +224,14 @@ vr_type = {'ml_training_set': set_names[5], 'type': "VALIDATION RFI"}
 u_type = {'ml_training_set': set_names[6], 'type': "UNLABELLED"}
 
 # Post the MlTrainingSetTypes and store their autoincremented ids
-tp_id = my_session.post('http://localhost:8000/api/ml_training_set_types/', json=tp_type).json()['id']
-tn_id = my_session.post('http://localhost:8000/api/ml_training_set_types/', json=tn_type).json()['id']
-tr_id = my_session.post('http://localhost:8000/api/ml_training_set_types/', json=tr_type).json()['id']
-vp_id = my_session.post('http://localhost:8000/api/ml_training_set_types/', json=vp_type).json()['id']
-vn_id = my_session.post('http://localhost:8000/api/ml_training_set_types/', json=vn_type).json()['id']
-vr_id = my_session.post('http://localhost:8000/api/ml_training_set_types/', json=vr_type).json()['id']
-u_id = my_session.post('http://localhost:8000/api/ml_training_set_types/', json=u_type).json()['id']
+URL = f'{base_url}ml_training_set_types/'
+tp_id = my_session.post(URL, json=tp_type).json()['id']
+tn_id = my_session.post(URL, json=tn_type).json()['id']
+tr_id = my_session.post(URL, json=tr_type).json()['id']
+vp_id = my_session.post(URL, json=vp_type).json()['id']
+vn_id = my_session.post(URL, json=vn_type).json()['id']
+vr_id = my_session.post(URL, json=vr_type).json()['id']
+u_id = my_session.post(URL, json=u_type).json()['id']
 
 ''' MlTrainingSetCollection '''
 
@@ -233,7 +240,7 @@ set_types_list = [tp_id, tn_id, tr_id, vp_id, vn_id, vr_id, u_id]
 
 # Create and Post the MlTrainingSetCollection
 finished_collection = {'name': set_collection_name, 'ml_training_set_types': set_types_list}
-my_session.post('http://localhost:8000/api/ml_training_set_collections/', json=finished_collection)
+my_session.post(f'{base_url}ml_training_set_collections/', json=finished_collection)
 
 
 my_session.close()

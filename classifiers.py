@@ -211,9 +211,9 @@ class Train_SGAN_DM_Curve:
         if save_best_model == True:
             if acc > model_accuracy:
                 print('Current Model has %.3f training accuracy which is better than previous best of %.3f. Will save it as as new best model.' % (acc * 100, model_accuracy * 100 ))
-                filename2 = self.output_path + 'MWA_best_retrained_models/dm_curve_best_generator_model.h5'  
+                filename2 = self.output_path + 'best_retrained_models/dm_curve_best_generator_model.h5'  
                 g_model.save(filename2)
-                filename3 = self.output_path + 'MWA_best_retrained_models/dm_curve_best_discriminator_model.h5'
+                filename3 = self.output_path + 'best_retrained_models/dm_curve_best_discriminator_model.h5'
                 c_model.save(filename3)
                 model_accuracy = acc
 
@@ -511,9 +511,9 @@ class Train_SGAN_Pulse_Profile:
         if save_best_model == True:
             if acc > model_accuracy:
                 print('Current Model has %.3f training accuracy which is better than previous best of %.3f. Will save it as as new best model.' % (acc * 100, model_accuracy * 100 ))
-                filename2 = self.output_path + 'MWA_best_retrained_models/pulse_profile_best_generator_model.h5'  
+                filename2 = self.output_path + 'best_retrained_models/pulse_profile_best_generator_model.h5'  
                 g_model.save(filename2)
-                filename3 = self.output_path + 'MWA_best_retrained_models/pulse_profile_best_discriminator_model.h5'
+                filename3 = self.output_path + 'best_retrained_models/pulse_profile_best_discriminator_model.h5'
                 c_model.save(filename3)
                 model_accuracy = acc
 
@@ -811,9 +811,9 @@ class Train_SGAN_Freq_Phase:
         if save_best_model == True:
             if acc > model_accuracy:
                 print('Current Model has %.3f training accuracy which is better than previous best of %.3f. Will save it as as new best model.' % (acc * 100, model_accuracy * 100 ))
-                filename2 = self.output_path + 'MWA_best_retrained_models/freq_phase_best_generator_model.h5'  
+                filename2 = self.output_path + 'best_retrained_models/freq_phase_best_generator_model.h5'  
                 g_model.save(filename2)
-                filename3 = self.output_path + 'MWA_best_retrained_models/freq_phase_best_discriminator_model.h5'
+                filename3 = self.output_path + 'best_retrained_models/freq_phase_best_discriminator_model.h5'
                 c_model.save(filename3)
                 model_accuracy = acc
 
@@ -1107,9 +1107,9 @@ class Train_SGAN_Time_Phase:
         if save_best_model == True:
             if acc > model_accuracy:
                 print('Current Model has %.3f training accuracy which is better than previous best of %.3f. Will save it as as new best model.' % (acc * 100, model_accuracy * 100 ))
-                filename2 = self.output_path + 'MWA_best_retrained_models/time_phase_best_generator_model.h5'  
+                filename2 = self.output_path + 'best_retrained_models/time_phase_best_generator_model.h5'  
                 g_model.save(filename2)
-                filename3 = self.output_path + 'MWA_best_retrained_models/time_phase_best_discriminator_model.h5'
+                filename3 = self.output_path + 'best_retrained_models/time_phase_best_discriminator_model.h5'
                 c_model.save(filename3)
                 model_accuracy = acc
 

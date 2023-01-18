@@ -1,7 +1,6 @@
 ###############################################################################
 #
-# This file contains code that will download and process the Candidate data
-# for a particular MlTrainingSetCollection.
+# Downloads and processes the Candidate data for a particular MlTrainingSetCollection.
 # 
 #    1. Takes as arguments the path of the data directory and the name of the
 #       MlTrainingSetCollection to download.
@@ -32,17 +31,23 @@ from urllib.request import urlretrieve
 
 # Constants
 DATABASE_URL = 'https://apps.datacentral.org.au/smart/media/'
+SMART_BASE_URL = os.environ.get('SMART_BASE_URL', 'http://localhost:8000/api/')
+SMART_TOKEN = os.environ.get('SMART_TOKEN', 'fagkjfasbnlvasfdfwjf783YDF')
 NUM_CPUS = cpu_count()
 N_FEATURES = 4
 
 # Parse arguments
-parser = argparse.ArgumentParser(description='Download pfd files, label, and extract as numpy array files.')
+parser = argparse.ArgumentParser(description='Download pfd files and extract as numpy array files.')
 parser.add_argument('-d', '--data_directory', help='Absolute path of the data directory (contains the candidates/ subdirectory)', default='/data/SGAN_Test_Data/')
 parser.add_argument('-n', '--collection_name', help='Name of the MlTrainingSetCollection to download', default="")
+parser.add_argument('-l', '--base_url', help='Base URL for the database', default=SMART_BASE_URL)
+parser.add_argument('-t', '--token', help='Authorization token for the database', default=SMART_TOKEN)
 
 args = parser.parse_args()
 path_to_data = args.data_directory
 collection_name = args.collection_name
+base_url = args.base_url
+token = args.token
 
 # Make the target directory, if it doesn't already exist
 os.makedirs(path_to_data, exist_ok=True)
@@ -58,13 +63,13 @@ class TokenAuth(requests.auth.AuthBase):
 
 # Start authorised session
 my_session = requests.session()
-my_session.auth = TokenAuth("fagkjfasbnlvasfdfwjf783YDF")
+my_session.auth = TokenAuth(token)
 
 
 ########## Function Definitions ##########
 
-# Downloads the requested json file and returns it as a pandas dataframe
-def get_dataframe(url='http://localhost:8000/api/candidates/', param=None):
+# Queries the requested url and returns the result as a pandas dataframe
+def get_dataframe(url=f'{base_url}candidates/', param=None):
     try:
         table = my_session.get(url, params=param)
         table.raise_for_status()
@@ -72,9 +77,9 @@ def get_dataframe(url='http://localhost:8000/api/candidates/', param=None):
         print(err)
     return pd.read_json(table.json)
 
-# Downloads the requested json file and returns the primary keys as a numpy array
-# Only works if the pk column is called 'id' or 'name'
-def get_keys(url='http://localhost:8000/api/candidates/', param=None):
+# Queries the requested url and returns the primary keys of the result as a numpy array
+# (Only works if there is a column called 'id' or 'name')
+def get_keys(url=f'{base_url}candidates/', param=None):
     try:
         table = my_session.get(url, params=param)
         table.raise_for_status()
@@ -90,7 +95,7 @@ def get_keys(url='http://localhost:8000/api/candidates/', param=None):
             print("This table has no 'id' or 'name' column.")
     return np.array(keys)
 
-# Checks if a MlTrainingSetCollection exists
+# Checks if a particular MlTrainingSetCollection exists
 def check_collection_existence(name):
     if name in set_collections:
         return True
@@ -100,7 +105,7 @@ def check_collection_existence(name):
         print(f"The name {name} doesn't match an existing MlTrainingSetCollection")
         return False
 
-# Downloads pfd files from the database to the candidates directory
+# Downloads pfd files from the database to the candidates/ directory
 # Returns False and prints a message if the download fails, otherwise returns True
 def download_pfd(pfd_name):
     if len(glob(path_to_data + pfd_name[:-4] + '*')) == 0:
@@ -111,7 +116,7 @@ def download_pfd(pfd_name):
             print(f"Download failed: {pfd_name}, {e}")
             return False
     else:
-        # If the target pfd file or associated numpy files already exist, download is skipped
+        # If the target pfd file or associated numpy files already exist, skip download
         return True
 
 # Executes the downloads in parallel (threads)
@@ -126,7 +131,7 @@ def parallel_download(download_list):
     print(f"Download time: {total_time}")
     return successes
 
-# Extracts pfd files to numpy array files in the candidates directory and deletes the pfd files
+# Extracts pfd files to numpy array files in the candidates/ directory and deletes the pfd files
 # Returns False and prints a message if the extraction fails, otherwise returns True
 def extract_from_pfd(pfd_name):
     if not len(glob(path_to_data + pfd_name[:-4] + '*')) == N_FEATURES:
@@ -150,7 +155,7 @@ def extract_from_pfd(pfd_name):
             os.unlink(path_to_data + pfd_name)
             return False
     else:
-        # If the numpy array files already exist, extraction is skipped
+        # If the numpy array files already exist, skip extraction
         return True
 
 # Executes the extractions in parallel (threads)
@@ -169,7 +174,7 @@ def parallel_extraction(extraction_list):
 ########## Download Candidate Files ##########
 
 # Get the list of all MlTrainingSetCollection names
-set_collections = get_keys('http://localhost:8000/api/ml_training_set_collections/')
+set_collections = get_keys(f'{base_url}ml_training_set_collections/')
 
 # Ensure that the requested MlTrainingSetCollection exists
 exists = check_collection_existence(collection_name)
@@ -178,7 +183,7 @@ while not exists:
     exists = check_collection_existence(collection_name)
 
 # Get the names of the MlTrainingSets associated with the MlTrainingSetCollection
-URL = f'http://localhost:8000/api/ml_training_sets/?types__collections={collection_name}'
+URL = f'{base_url}ml_training_sets/?types__collections={collection_name}'
 training_sets = get_keys(URL)
 num_of_sets = len(training_sets)
 
@@ -187,9 +192,10 @@ num_failed_extractions = []
 # Download and extract the data for all Candidates associated with each MlTrainingSet
 for i in range(num_of_sets):
     print(f"Starting work on set {i}/{num_of_sets}, {training_sets[i]}.")
-    URL = f'http://localhost:8000/api/candidates/?ml_training_sets={training_sets[i]}'
+    URL = f'{base_url}candidates/?ml_training_sets={training_sets[i]}'
+    # Retrieve the file names for the relevant Candidates
     candidates = get_dataframe(URL)
-    list_of_pfd_paths = candidates['file'].values
+    list_of_pfd_paths = candidates['file'].to_numpy()
     # Download the pfd files and keep track of failed downloads
     download_successes = parallel_download(list_of_pfd_paths)
     # Extract the pfds to numpy arrays, delete the pfds, and track failed extractions
