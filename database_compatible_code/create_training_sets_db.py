@@ -15,7 +15,7 @@
 #         - Unlabelled: All
 #    3. Candidates are randomly chosen for each set based on the following rules:
 #         - The ratio of pulsars to non-pulsars will be 1:1
-#         - The ratio of noise to RFI will be between 1:1 (preferred) and 2:1
+#         - The ratio of noise to RFI will be between 1:1 (preferred) and 4:1
 #         - Candidates associated with the same pulsar must come from different
 #           observations
 #         - Any Candidate not chosen for another set can be in the unlabelled set
@@ -143,7 +143,7 @@ print(f"Total number of Candidates (including unlabelled): {total_num_cands}")
 
 # The number of each candidate type to use
 # Based on the selection rules described at the top
-num_pulsars = min(num_pulsars, total_num_pulsars, 2*total_num_noise, 3*total_num_RFI)
+num_pulsars = min(num_pulsars, total_num_pulsars, 2*total_num_noise, 5*total_num_RFI)
 num_RFI = min(floor(num_pulsars/2), total_num_RFI)
 num_noise = min(num_pulsars - num_RFI, total_num_noise)
 

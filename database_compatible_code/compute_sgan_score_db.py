@@ -9,12 +9,21 @@
 ###############################################################################
 
 import argparse, errno, os, pickle, requests, sys
+import concurrent.futures as cf
 from glob import glob
 from keras.utils import to_categorical
 from keras.models import load_model
+from multiprocessing import cpu_count
 import numpy as np
 from sklearn.ensemble import StackingClassifier
+import tarfile
 from time import time
+
+# Constants
+NUM_CPUS = cpu_count()
+N_FEATURES = 4
+SMART_BASE_URL = os.environ.get('SMART_BASE_URL', 'http://localhost:8000/api/')
+SMART_TOKEN = os.environ.get('SMART_TOKEN', 'fagkjfasbnlvasfdfwjf783YDF')
 
 class NotADirectoryError(Exception):
     pass
@@ -25,18 +34,58 @@ def dir_path(string):
     else:
         raise NotADirectoryError("Directory path is not valid.")
 
-parser = argparse.ArgumentParser(description='Classify Candidates using a SGAN model.')
-parser.add_argument('-i', '--input_path', help='Absolute path of validation data directory', default="/data/SGAN_Test_Data/validation/")
-parser.add_argument('-o', '--output', help='Absolute path of output directory',  default="/data/SGAN_Test_Data/")
-parser.add_argument('-m', '--models', help='Absolute path of models directory',  default="/MWA_sgan/MWA_best_retrained_models/attempt_20/")
-parser.add_argument('-b', '--batch_size', help='No. of pfd files that will be read in one batch', default=1, type=int)
-args = parser.parse_args()
-path_to_data = args.input_path
-output_path = args.output
-path_to_models = args.models
-batch_size = args.batch_size
+# Parse arguments
+parser = argparse.ArgumentParser(description='Classify Candidates using an SGAN model.')
+parser.add_argument('-d', '--data_directory', help='Absolute path of the data directory (contains the candidates/ and saved_models/ subdirectories)', default='/data/SGAN_Test_Data/')
+parser.add_argument('-s', '--set_name', help='Name of the MlTrainingSet to classify', default="")
+parser.add_argument('-m', '--model_name', help='Name of the SGAN model to use', default="")
+parser.add_argument('-b', '--batch_size', help='No. of pfd files that will be read in one batch', default='16', type=int)
+parser.add_argument('-l', '--base_url', help='Base URL for the database', default=SMART_BASE_URL)
+parser.add_argument('-t', '--token', help='Authorization token for the database', default=SMART_TOKEN)
 
-dir_path(path_to_data)
+args = parser.parse_args()
+path_to_data = args.data_directory
+set_name = args.set_name
+model_name = args.model_name
+batch_size = args.batch_size
+base_url = args.base_url
+token = args.token
+
+# Ensure that the base url ends with a slash
+if base_url[-1] != '/':
+    base_url += '/'
+
+# Ensure that the data path ends with a slash
+if path_to_data[-1] != '/':
+    path_to_data += '/'
+
+# Check that the specified input directories exist
+dir_path(path_to_data + 'candidates/')
+path_to_models = path_to_data + 'saved_models/'
+dir_path(path_to_models)
+
+# Database token
+class TokenAuth(requests.auth.AuthBase):
+    def __init__(self, token):
+        self.token = token
+
+    def __call__(self, r):
+        r.headers['Authorization'] = "Token {}".format(self.token)
+        return r
+
+# Start authorised session
+my_session = requests.session()
+my_session.auth = TokenAuth(token)
+
+
+# NOTE variables that need to be replaced:
+# path_to_data may be different now
+# output_path should be removed (no csv file anymore)
+# path_to_models is different now
+
+
+########## WIP from here on ##########
+
 
 # Get the candidate file names from validation_labels.csv
 with open(path_to_data + "validation_labels.csv") as f:

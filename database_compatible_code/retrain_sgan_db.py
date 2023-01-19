@@ -48,9 +48,11 @@ def dir_path(string):
 parser = argparse.ArgumentParser(description='Retrain SGAN model using files from download_candidate_data_db.py')
 parser.add_argument('-d', '--data_directory', help='Absolute path of the data directory (contains the candidates/ and working_models/ subdirectories)', default='/data/SGAN_Test_Data/')
 parser.add_argument('-n', '--collection_name', help='Name of the MlTrainingSetCollection to download', default="")
-parser.add_argument('-m', '--model_name', help='Name to save the retrained models under', default="")
+parser.add_argument('-m', '--model_name', help='Name to save the retrained model under', default="")
 parser.add_argument('-b', '--batch_size', help='No. of pfd files that will be read in one batch', default='16', type=int)
 parser.add_argument('-e', '--num_epochs', help='No. of epochs to train', default='20', type=int)
+parser.add_argument('-i', '--individual_stats', help='Also print stats for each feature individually (dm_curve, freq_phase, etc.)', default=True)
+parser.add_argument('-a', '--auto_save', help='Always save the new SGAN model (requires a valid --model_name parameter)', default=True)
 parser.add_argument('-l', '--base_url', help='Base URL for the database', default=SMART_BASE_URL)
 parser.add_argument('-t', '--token', help='Authorization token for the database', default=SMART_TOKEN)
 
@@ -60,6 +62,7 @@ collection_name = args.collection_name
 model_name = args.model_name
 batch_size = args.batch_size
 num_epochs = args.num_epochs
+individual_stats = args.individual_stats
 base_url = args.base_url
 token = args.token
 
@@ -157,6 +160,19 @@ def parallel_file_check(file_list):
             successes.append(result)
     total_time = time() - start
     return successes   
+
+# Ask the user if they wish to save the model
+def ask_to_save():
+    save = input("Do you wish to save this SGAN model? (y/n) ")
+    if save.lower() == "n":
+        save = input("Are you sure? (y/n)")
+        if save.lower() == "y":
+            print(f"This model will be temporarily available in {path_to_models}best_retrained_models/")
+            sys.exit()
+        else:
+            ask_to_save()
+    else:
+        pass
 
 
 ########## Get Filenames and Labels ##########
@@ -348,7 +364,7 @@ freq_phase_instance = Train_SGAN_Freq_Phase(path_to_models, freq_phase_data, tra
 time_phase_instance = Train_SGAN_Time_Phase(path_to_models, time_phase_data, training_labels, time_phase_validation_data, validation_labels, time_phase_unlabelled_data, unlabelled_labels, batch_size)
 '''
 
-# Train the DM Curve models
+# Train the DM Curve model
 start = time()
 d_model, c_model = dm_curve_instance.define_discriminator()
 g_model = dm_curve_instance.define_generator()
@@ -358,7 +374,7 @@ end = time()
 print('DM Curve Model Retraining has been completed')
 print(f'Time = {end-start:.3f} seconds')
 
-# Train the Pulse Profile models
+# Train the Pulse Profile model
 start = time()
 d_model, c_model = pulse_profile_instance.define_discriminator()
 g_model = pulse_profile_instance.define_generator()
@@ -368,7 +384,7 @@ end = time()
 print('Pulse Profile Model Retraining has been completed')
 print(f'Time = {end-start:.3f} seconds')
 
-# Train the Freq-Phase models
+# Train the Freq-Phase model
 start = time()
 d_model, c_model = freq_phase_instance.define_discriminator()
 g_model = freq_phase_instance.define_generator()
@@ -378,7 +394,7 @@ end = time()
 print('Freq-Phase Model Retraining has been completed')
 print(f'Time = {end-start:.3f} seconds')
 
-# Train the Time-Phase models
+# Train the Time-Phase model
 start = time()
 d_model, c_model = time_phase_instance.define_discriminator()
 g_model = time_phase_instance.define_generator()
@@ -462,6 +478,8 @@ stacked_predictions = np.reshape(stacked_predictions, (len(dm_curve_data), 4))
 # Use the logistic regression model
 classified_results = model.predict(stacked_predictions)
 
+print('Performance against the validation set: ')
+
 if individual_stats:
     # DM CURVE
     print('')
@@ -513,13 +531,17 @@ print(f"False Positive Rate: {fpr:.3f}, Specificity: {specificity:.3f}, G-Mean: 
 
 ########## Make Database Objects ##########
 
+# Ask whether to save the model, if not auto-saving
+if not auto_save:
+    ask_to_save()
+
 # Get the list of all SGAN model names in the AlgorithmSetting table
 sgan_model_names = get_column(f'{base_url}algorithm_settings/?algorithm_parameter=SGAN_files', field='value')
 
-# Ensure that the chosen AlgorithmSetting name is valid
+# Ensure that the chosen model name is valid
 valid = check_name_validity(model_name)
 while not valid:
-    model_name = input("Enter a name for the retrained models: ")
+    model_name = input("Enter a name for the SGAN model: ")
     valid = check_name_validity(model_name)
 
 # Copy the working_models/ files to a subdirectory of saved_models/ under the chosen model name
@@ -535,8 +557,9 @@ with tarfile.open(f'{model_name}.tar.gz', "w:gz") as tar:
     tar.add(new_dir_path, arcname=os.path.basename(new_dir_path))
     # Create the AlgorithmSetting object to hold the new model
     my_data = {'algorithm_parameter': 'SGAN_files', 'value': model_name, 'ml_training_set_collection': collection_name, \
-            'description': f'Accuracy on validation set: {accuracy}'}
+            'description': f'Accuracy = {accuracy:.3f}, Confusion Matrix: [TP = {tp}, FN = {fn}, FP = {fp}, TN = {tn}]'}
     my_files = {'config_file': tar}
+    # Upload the new model to the database
     my_session.post(f'{base_url}algorithm_settings/', data=my_data, files=my_files)
 
 
