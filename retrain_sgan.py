@@ -90,7 +90,7 @@ unlabelled_files = path_to_data + unlabelled_labels['Pfd path'].to_numpy()
 # Extract the labels, creating labels of -1 for the unlabelled candidates
 training_labels = training_labels['Classification'].to_numpy()
 validation_labels = validation_labels['Classification'].to_numpy()
-unlabelled_lables = np.tile(-1, len(unlabelled_files))
+unlabelled_labels = np.tile(-1, len(unlabelled_files))
 
 # Print the number of each type of candidate in the labelled training set
 print('Note: Labels 1, 0, and -1 represent pulsars, non-pulsars, and unlabelled candidates respectively.')
@@ -166,21 +166,21 @@ print('Unlabelled data loaded')
 learning_rate_discriminator = [0.0008, 0.001, 0.0002, 0.0002] 
 learning_rate_gan = [0.003, 0.001, 0.0002, 0.0002]
 
-dm_curve_instance = Train_SGAN_DM_Curve(path_to_models, dm_curve_data, training_labels, dm_curve_validation_data, validation_labels, dm_curve_unlabelled_data, unlabelled_lables, batch_size, \
+dm_curve_instance = Train_SGAN_DM_Curve(path_to_models, dm_curve_data, training_labels, dm_curve_validation_data, validation_labels, dm_curve_unlabelled_data, unlabelled_labels, batch_size, \
                     lr_dis = learning_rate_discriminator[0], lr_gan = learning_rate_gan[0])
-pulse_profile_instance = Train_SGAN_Pulse_Profile(path_to_models, pulse_profile_data, training_labels, pulse_profile_validation_data, validation_labels, pulse_profile_unlabelled_data, unlabelled_lables, batch_size, \
+pulse_profile_instance = Train_SGAN_Pulse_Profile(path_to_models, pulse_profile_data, training_labels, pulse_profile_validation_data, validation_labels, pulse_profile_unlabelled_data, unlabelled_labels, batch_size, \
                     lr_dis = learning_rate_discriminator[1], lr_gan = learning_rate_gan[1])
-freq_phase_instance = Train_SGAN_Freq_Phase(path_to_models, freq_phase_data, training_labels, freq_phase_validation_data, validation_labels, freq_phase_unlabelled_data, unlabelled_lables, batch_size, \
+freq_phase_instance = Train_SGAN_Freq_Phase(path_to_models, freq_phase_data, training_labels, freq_phase_validation_data, validation_labels, freq_phase_unlabelled_data, unlabelled_labels, batch_size, \
                     lr_dis = learning_rate_discriminator[2], lr_gan = learning_rate_gan[2])
-time_phase_instance = Train_SGAN_Time_Phase(path_to_models, time_phase_data, training_labels, time_phase_validation_data, validation_labels, time_phase_unlabelled_data, unlabelled_lables, batch_size, \
+time_phase_instance = Train_SGAN_Time_Phase(path_to_models, time_phase_data, training_labels, time_phase_validation_data, validation_labels, time_phase_unlabelled_data, unlabelled_labels, batch_size, \
                     lr_dis = learning_rate_discriminator[3], lr_gan = learning_rate_gan[3])
 
 '''
 # Use default learning rates
-dm_curve_instance = Train_SGAN_DM_Curve(path_to_models, dm_curve_data, training_labels, dm_curve_validation_data, validation_labels, dm_curve_unlabelled_data, unlabelled_lables, batch_size)
-pulse_profile_instance = Train_SGAN_Pulse_Profile(path_to_models, pulse_profile_data, training_labels, pulse_profile_validation_data, validation_labels, pulse_profile_unlabelled_data, unlabelled_lables, batch_size)
-freq_phase_instance = Train_SGAN_Freq_Phase(path_to_models, freq_phase_data, training_labels, freq_phase_validation_data, validation_labels, freq_phase_unlabelled_data, unlabelled_lables, batch_size)
-time_phase_instance = Train_SGAN_Time_Phase(path_to_models, time_phase_data, training_labels, time_phase_validation_data, validation_labels, time_phase_unlabelled_data, unlabelled_lables, batch_size)
+dm_curve_instance = Train_SGAN_DM_Curve(path_to_models, dm_curve_data, training_labels, dm_curve_validation_data, validation_labels, dm_curve_unlabelled_data, unlabelled_labels, batch_size)
+pulse_profile_instance = Train_SGAN_Pulse_Profile(path_to_models, pulse_profile_data, training_labels, pulse_profile_validation_data, validation_labels, pulse_profile_unlabelled_data, unlabelled_labels, batch_size)
+freq_phase_instance = Train_SGAN_Freq_Phase(path_to_models, freq_phase_data, training_labels, freq_phase_validation_data, validation_labels, freq_phase_unlabelled_data, unlabelled_labels, batch_size)
+time_phase_instance = Train_SGAN_Time_Phase(path_to_models, time_phase_data, training_labels, time_phase_validation_data, validation_labels, time_phase_unlabelled_data, unlabelled_labels, batch_size)
 '''
 
 # Train the DM Curve models

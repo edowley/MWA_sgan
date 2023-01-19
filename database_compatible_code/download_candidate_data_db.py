@@ -14,17 +14,14 @@
 #
 ###############################################################################
 
-import argparse
+import argparse, os, sys
 import concurrent.futures as cf
 from glob import glob
-import json
 from math import floor
 from multiprocessing import cpu_count
 import numpy as np
-import os
 import pandas as pd
 import requests
-import sys
 from time import time
 from ubc_AI.training import pfddata
 from urllib.request import urlretrieve
@@ -48,6 +45,14 @@ path_to_data = args.data_directory
 collection_name = args.collection_name
 base_url = args.base_url
 token = args.token
+
+# Ensure that the base url ends with a slash
+if base_url[-1] != '/':
+    base_url += '/'
+
+# Ensure that the data path ends with a slash
+if path_to_data[-1] != '/':
+    path_to_data += '/'
 
 # Make the target directory, if it doesn't already exist
 os.makedirs(path_to_data, exist_ok=True)
@@ -75,10 +80,10 @@ def get_dataframe(url=f'{base_url}candidates/', param=None):
         table.raise_for_status()
     except requests.exceptions.HTTPError as err:
         print(err)
-    return pd.read_json(table.json)
+    return pd.read_json(table.json())
 
-# Queries the requested url and returns the primary keys of the result as a numpy array
-# (Only works if there is a column called 'id' or 'name')
+# Queries a url and returns the primary keys of the result as a numpy array
+# (Only works if this is a column called 'id' or 'name')
 def get_keys(url=f'{base_url}candidates/', param=None):
     try:
         table = my_session.get(url, params=param)

@@ -9,10 +9,10 @@
 #
 ###############################################################################
 
-import argparse, errno, glob, itertools, math, os, pickle, sys
+import argparse, errno, itertools, math, os, pickle, requests, shutil, sys
 from classifiers import Train_SGAN_DM_Curve, Train_SGAN_Pulse_Profile, Train_SGAN_Freq_Phase, Train_SGAN_Time_Phase
 import concurrent.futures as cf
-import json
+from glob import glob
 from keras import backend
 from keras.callbacks import TensorBoard, EarlyStopping, ModelCheckpoint
 from keras.layers import Activation, BatchNormalization, concatenate, Conv1D, Conv2D, Dense, Dropout, Flatten, Input, LeakyReLU, MaxPooling2D, MaxPooling1D, Reshape, UpSampling2D, ZeroPadding2D
@@ -22,11 +22,10 @@ import matplotlib.pyplot as plt
 from multiprocessing import cpu_count
 import numpy as np
 import pandas as pd
-import requests
 from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import confusion_matrix, f1_score, precision_score, recall_score, log_loss
+from sklearn.metrics import accuracy_score, confusion_matrix, f1_score, precision_score, recall_score
 from sklearn.model_selection import train_test_split
-import sys
+import tarfile
 import tensorflow as tf
 from time import time
 
@@ -47,7 +46,7 @@ def dir_path(string):
 
 # Parse arguments
 parser = argparse.ArgumentParser(description='Retrain SGAN model using files from download_candidate_data_db.py')
-parser.add_argument('-d', '--data_directory', help='Absolute path of the data directory (contains the candidates/ and models/ subdirectories)', default='/data/SGAN_Test_Data/')
+parser.add_argument('-d', '--data_directory', help='Absolute path of the data directory (contains the candidates/ and working_models/ subdirectories)', default='/data/SGAN_Test_Data/')
 parser.add_argument('-n', '--collection_name', help='Name of the MlTrainingSetCollection to download', default="")
 parser.add_argument('-m', '--model_name', help='Name to save the retrained models under', default="")
 parser.add_argument('-b', '--batch_size', help='No. of pfd files that will be read in one batch', default='16', type=int)
@@ -57,7 +56,6 @@ parser.add_argument('-t', '--token', help='Authorization token for the database'
 
 args = parser.parse_args()
 path_to_data = args.data_directory
-path_to_models = path_to_data + 'models/'
 collection_name = args.collection_name
 model_name = args.model_name
 batch_size = args.batch_size
@@ -65,8 +63,17 @@ num_epochs = args.num_epochs
 base_url = args.base_url
 token = args.token
 
+# Ensure that the base url ends with a slash
+if base_url[-1] != '/':
+    base_url += '/'
+
+# Ensure that the data path ends with a slash
+if path_to_data[-1] != '/':
+    path_to_data += '/'
+
 # Check that the specified input and output directories exist
 dir_path(path_to_data + 'candidates/')
+path_to_models = path_to_data + 'working_models/'
 os.makedirs(path_to_models, exist_ok=True)
 
 # Check that the output subdirectories exist
@@ -90,53 +97,34 @@ my_session.auth = TokenAuth(token)
 
 ########## Function Definitions ##########
 
-# Downloads the requested json file and returns it as a pandas dataframe
+# Queries a url and returns the result as a pandas dataframe
 def get_dataframe(url=f'{base_url}candidates/', param=None):
     try:
         table = my_session.get(url, params=param)
         table.raise_for_status()
     except requests.exceptions.HTTPError as err:
         print(err)
-    return pd.read_json(table.json)
+    return pd.read_json(table.json())
 
-# Downloads the requested json file and returns the primary keys as a numpy array
-# Only works if the pk column is called 'id' or 'name'
-def get_keys(url=f'{base_url}candidates/', param=None):
+# Queries a url and returns the requested column of the result as a numpy array
+def get_column(url=f'{base_url}candidates/', param=None, field='id'):
     try:
         table = my_session.get(url, params=param)
         table.raise_for_status()
     except requests.exceptions.HTTPError as err:
         print(err)
     try:
-        keys = [row['id'] for row in table.json()]
-    except KeyError:
-        try:
-            keys = [row['name'] for row in table.json()]
-        except KeyError as err:
-            print(err)
-            print("This table has no 'id' or 'name' column.")
-    return np.array(keys)
-
-# Downloads the requested json file and returns the file names as a numpy array
-# Only works if there is a column called 'file'
-def get_filenames(url=f'{base_url}candidates/', param=None):
-    try:
-        table = my_session.get(url, params=param)
-        table.raise_for_status()
-    except requests.exceptions.HTTPError as err:
-        print(err)
-    try:
-        filenames = [row['file'] for row in table.json()]
+        entries = [row[field] for row in table.json()]
     except KeyError as err:
         print(err)
-        print("This table has no 'file' column.")
-    return np.array(filenames)
+        print(f"This table has no '{field}' column")
+    return np.array(entries)
 
 # Checks if a model name is valid
 def check_name_validity(name):
     if name == "":
         return False
-    elif name in algorithm_setting_names:
+    elif name in sgan_model_names:
         print(f"The name {name} is already in use")
         return False
     else:
@@ -174,23 +162,13 @@ def parallel_file_check(file_list):
 ########## Get Filenames and Labels ##########
 
 # Get the list of all MlTrainingSetCollection names
-set_collections = get_keys(f'{base_url}ml_training_set_collections/')
+set_collections = get_column(f'{base_url}ml_training_set_collections/', field='name')
 
 # Ensure that the requested MlTrainingSetCollection exists
 exists = check_collection_existence(collection_name)
 while not exists:
     collection_name = input("Enter the name of the MlTrainingSetCollection to download: ")
     exists = check_collection_existence(collection_name)
-
-# Get the list of all AlgorithmSettings
-algorithm_settings = get_dataframe(f'{base_url}algorithm_settings/')
-algorithm_setting_names = ????? # 'value' or 'description'? Probably 'value'
-
-# Ensure that the chosen AlgorithmSettings name is valid
-valid = check_name_validity(model_name)
-while not valid:
-    model_name = input("Enter a name for the retrained models: ")
-    valid = check_name_validity(model_name)
 
 # Get the MlTrainingSetTypes associated with the MlTrainingSetCollection
 URL = f'{base_url}ml_training_set_types/?collection={collection_name}'
@@ -204,7 +182,7 @@ for set_type in set_types:
     URL = f'{base_url}candidates/?ml_training_sets__types={set_type['id']}'
     # Check files for training pulsars
     if set_type['type'] == "TRAINING PULSARS":
-        training_pulsars = get_filenames(URL)
+        training_pulsars = get_column(URL, field='file')
         file_successes = parallel_file_check(training_pulsars)
         num_file_failures = np.count_nonzero(file_successes=False)
         num_of_sets += 1
@@ -213,7 +191,7 @@ for set_type in set_types:
             sys.exit()
     # Check files for training noise
     elif set_type['type'] == "TRAINING NOISE":
-        training_noise = get_filenames(URL)
+        training_noise = get_column(URL, field='file')
         file_successes = parallel_file_check(training_noise)
         num_file_failures = np.count_nonzero(file_successes=False)
         num_of_sets += 1
@@ -222,7 +200,7 @@ for set_type in set_types:
             sys.exit()
     # Check files for training RFI
     elif set_type['type'] == "TRAINING RFI":
-        training_RFI = get_filenames(URL)
+        training_RFI = get_column(URL, field='file')
         file_successes = parallel_file_check(training_RFI)
         num_file_failures = np.count_nonzero(file_successes=False)
         num_of_sets += 1
@@ -231,7 +209,7 @@ for set_type in set_types:
             sys.exit()
     # Check files for validation pulsars
     elif set_type['type'] == "VALIDATION PULSARS":
-        validation_pulsars = get_filenames(URL)
+        validation_pulsars = get_column(URL, field='file')
         file_successes = parallel_file_check(validation_pulsars)
         num_file_failures = np.count_nonzero(file_successes=False)
         num_of_sets += 1
@@ -240,7 +218,7 @@ for set_type in set_types:
             sys.exit()
     # Check files for validation noise
     elif set_type['type'] == "VALIDATION NOISE":
-        validation_noise = get_filenames(URL)
+        validation_noise = get_column(URL, field='file')
         file_successes = parallel_file_check(validation_noise)
         num_file_failures = np.count_nonzero(file_successes=False)
         num_of_sets += 1
@@ -249,7 +227,7 @@ for set_type in set_types:
             sys.exit()
     # Check files for validation RFI
     elif set_type['type'] == "VALIDATION RFI":
-        validation_RFI = get_filenames(URL)
+        validation_RFI = get_column(URL, field='file')
         file_successes = parallel_file_check(validation_RFI)
         num_file_failures = np.count_nonzero(file_successes=False)
         num_of_sets += 1
@@ -258,7 +236,7 @@ for set_type in set_types:
             sys.exit()
     # Check files for unlabelled
     elif set_type['type'] == "UNLABELLED":
-        unlabelled_cands = get_filenames(URL)
+        unlabelled_cands = get_column(URL, field='file')
         file_successes = parallel_file_check(unlabelled_cands)
         num_file_failures = np.count_nonzero(file_successes=False)
         num_of_sets += 1
@@ -278,15 +256,15 @@ training_files = path_to_data + training_pulsars.append(training_noise.append(tr
 validation_files = path_to_data + validation_pulsars.append(validation_noise.append(validation_RFI))
 unlabelled_files = path_to_data + unlabelled_cands
 
-# Create the lables for each combined set
-training_lables = np.tile(1, len(training_pulsars)) + np.tile(0, len(training_noise)+len(training_RFI))
-validation_lables = np.tile(1, len(validation_pulsars)) + np.tile(0, len(validation_noise)+len(validation_RFI))
-unlabelled_lables = np.tile(-1, len(unlabelled_files))
+# Create the labels for each combined set
+training_labels = np.tile(1, len(training_pulsars)) + np.tile(0, len(training_noise)+len(training_RFI))
+validation_labels = np.tile(1, len(validation_pulsars)) + np.tile(0, len(validation_noise)+len(validation_RFI))
+unlabelled_labels = np.tile(-1, len(unlabelled_files))
 
 
 ########## Prepare Training Data ##########
 
-''' Prepare the labelled training data for use by the neural nets '''
+##### Prepare the labelled training data for use by the neural nets #####
 
 # Load data (using [:-4] to remove the '.pfd' file extension from the name)
 dm_curve_combined_array = [np.load(filename[:-4] + '_dm_curve.npy') for filename in training_files]
@@ -308,7 +286,7 @@ time_phase_data = np.array([np.interp(a, (a.min(), a.max()), (-1, +1)) for a in 
 
 print('Labelled training data loaded')
 
-''' Repeat for the validation data '''
+##### Repeat for the validation data #####
 
 dm_curve_validation_combined_array = [np.load(filename[:-4] + '_dm_curve.npy') for filename in validation_files]
 pulse_profile_validation_combined_array = [np.load(filename[:-4] + '_pulse_profile.npy') for filename in validation_files]
@@ -327,7 +305,7 @@ time_phase_validation_data = np.array([np.interp(a, (a.min(), a.max()), (-1, +1)
 
 print('Validation data loaded')
 
-''' Repeat for the unlabelled training data '''
+##### Repeat for the unlabelled training data #####
 
 dm_curve_unlabelled_combined_array = [np.load(filename[:-4] + '_dm_curve.npy') for filename in unlabelled_files]
 pulse_profile_unlabelled_combined_array = [np.load(filename[:-4] + '_pulse_profile.npy') for filename in unlabelled_files]
@@ -353,21 +331,21 @@ print('Unlabelled training data loaded')
 learning_rate_discriminator = [0.0008, 0.001, 0.0002, 0.0002] 
 learning_rate_gan = [0.003, 0.001, 0.0002, 0.0002]
 
-dm_curve_instance = Train_SGAN_DM_Curve(path_to_models, dm_curve_data, training_labels, dm_curve_validation_data, validation_labels, dm_curve_unlabelled_data, unlabelled_lables, batch_size, \
+dm_curve_instance = Train_SGAN_DM_Curve(path_to_models, dm_curve_data, training_labels, dm_curve_validation_data, validation_labels, dm_curve_unlabelled_data, unlabelled_labels, batch_size, \
                     lr_dis = learning_rate_discriminator[0], lr_gan = learning_rate_gan[0])
-pulse_profile_instance = Train_SGAN_Pulse_Profile(path_to_models, pulse_profile_data, training_labels, pulse_profile_validation_data, validation_labels, pulse_profile_unlabelled_data, unlabelled_lables, batch_size, \
+pulse_profile_instance = Train_SGAN_Pulse_Profile(path_to_models, pulse_profile_data, training_labels, pulse_profile_validation_data, validation_labels, pulse_profile_unlabelled_data, unlabelled_labels, batch_size, \
                     lr_dis = learning_rate_discriminator[1], lr_gan = learning_rate_gan[1])
-freq_phase_instance = Train_SGAN_Freq_Phase(path_to_models, freq_phase_data, training_labels, freq_phase_validation_data, validation_labels, freq_phase_unlabelled_data, unlabelled_lables, batch_size, \
+freq_phase_instance = Train_SGAN_Freq_Phase(path_to_models, freq_phase_data, training_labels, freq_phase_validation_data, validation_labels, freq_phase_unlabelled_data, unlabelled_labels, batch_size, \
                     lr_dis = learning_rate_discriminator[2], lr_gan = learning_rate_gan[2])
-time_phase_instance = Train_SGAN_Time_Phase(path_to_models, time_phase_data, training_labels, time_phase_validation_data, validation_labels, time_phase_unlabelled_data, unlabelled_lables, batch_size, \
+time_phase_instance = Train_SGAN_Time_Phase(path_to_models, time_phase_data, training_labels, time_phase_validation_data, validation_labels, time_phase_unlabelled_data, unlabelled_labels, batch_size, \
                     lr_dis = learning_rate_discriminator[3], lr_gan = learning_rate_gan[3])
 
 '''
-# Use default learning rates
-dm_curve_instance = Train_SGAN_DM_Curve(path_to_models, dm_curve_data, training_labels, dm_curve_validation_data, validation_labels, dm_curve_unlabelled_data, unlabelled_lables, batch_size)
-pulse_profile_instance = Train_SGAN_Pulse_Profile(path_to_models, pulse_profile_data, training_labels, pulse_profile_validation_data, validation_labels, pulse_profile_unlabelled_data, unlabelled_lables, batch_size)
-freq_phase_instance = Train_SGAN_Freq_Phase(path_to_models, freq_phase_data, training_labels, freq_phase_validation_data, validation_labels, freq_phase_unlabelled_data, unlabelled_lables, batch_size)
-time_phase_instance = Train_SGAN_Time_Phase(path_to_models, time_phase_data, training_labels, time_phase_validation_data, validation_labels, time_phase_unlabelled_data, unlabelled_lables, batch_size)
+# To use default learning rates:
+dm_curve_instance = Train_SGAN_DM_Curve(path_to_models, dm_curve_data, training_labels, dm_curve_validation_data, validation_labels, dm_curve_unlabelled_data, unlabelled_labels, batch_size)
+pulse_profile_instance = Train_SGAN_Pulse_Profile(path_to_models, pulse_profile_data, training_labels, pulse_profile_validation_data, validation_labels, pulse_profile_unlabelled_data, unlabelled_labels, batch_size)
+freq_phase_instance = Train_SGAN_Freq_Phase(path_to_models, freq_phase_data, training_labels, freq_phase_validation_data, validation_labels, freq_phase_unlabelled_data, unlabelled_labels, batch_size)
+time_phase_instance = Train_SGAN_Time_Phase(path_to_models, time_phase_data, training_labels, time_phase_validation_data, validation_labels, time_phase_unlabelled_data, unlabelled_labels, batch_size)
 '''
 
 # Train the DM Curve models
@@ -443,19 +421,123 @@ predictions_time_phase = np.rint(predictions_time_phase)
 predictions_time_phase = np.argmax(predictions_time_phase, axis=1)
 predictions_time_phase = np.reshape(predictions_time_phase, len(predictions_time_phase))
 
-# Train the logistic regression
-model = LogisticRegression()
 stacked_results = np.stack((predictions_freq_phase, predictions_time_phase, predictions_dm_curve, predictions_pulse_profile), axis=1)
 stacked_results = np.reshape(stacked_results, (len(predictions_freq_phase), 4))
+
+# Train the logistic regression
+model = LogisticRegression()
 model.fit(stacked_results, training_labels)
 pickle.dump(model, open(path_to_models + 'best_retrained_models/sgan_retrained.pkl', 'wb'))
 
-# logistic_model = pickle.load(open(path_to_models + 'best_retrained_models/sgan_retrained.pkl', 'rb'))
+
+########## Rate Model Performance ##########
+
+# Make predictions on the validation set
+predictions_dm_curve = dm_curve_model.predict([dm_curve_validation_data])
+predictions_pulse_profile = pulse_profile_model.predict([pulse_profile_validation_data])
+predictions_freq_phase = freq_phase_model.predict([freq_phase_validation_data])
+predictions_time_phase = time_phase_model.predict([time_phase_validation_data])
+
+# Process the predictions into numerical scores
+
+predictions_dm_curve = np.rint(predictions_dm_curve)
+predictions_dm_curve = np.argmax(predictions_dm_curve, axis=1)
+predictions_dm_curve = np.reshape(predictions_dm_curve, len(predictions_dm_curve))
+
+predictions_pulse_profile = np.rint(predictions_pulse_profile)
+predictions_pulse_profile = np.argmax(predictions_pulse_profile, axis=1)
+predictions_pulse_profile = np.reshape(predictions_pulse_profile, len(predictions_pulse_profile))
+
+predictions_freq_phase = np.rint(predictions_freq_phase)
+predictions_freq_phase = np.argmax(predictions_freq_phase, axis=1)
+predictions_freq_phase = np.reshape(predictions_freq_phase, len(predictions_freq_phase))
+
+predictions_time_phase = np.rint(predictions_time_phase)
+predictions_time_phase = np.argmax(predictions_time_phase, axis=1)
+predictions_time_phase = np.reshape(predictions_time_phase, len(predictions_time_phase))
+
+stacked_predictions = np.stack((predictions_freq_phase, predictions_time_phase, predictions_dm_curve, predictions_pulse_profile), axis=1)
+stacked_predictions = np.reshape(stacked_predictions, (len(dm_curve_data), 4))
+
+# Use the logistic regression model
+classified_results = model.predict(stacked_predictions)
+
+if individual_stats:
+    # DM CURVE
+    print('')
+    print('DM Curve Stats: ')
+    accuracy = accuracy_score(validation_labels, predictions_dm_curve)
+    recall = recall_score(validation_labels, predictions_dm_curve)
+    f1 = f1_score(validation_labels, predictions_dm_curve)
+    precision = precision_score(validation_labels, predictions_dm_curve)
+    print(f'Accuracy = {accuracy:.3f}, F1-score = {f1:.3f} | Precision = {precision:.3f}, Recall = {recall:.3f}')
+    # FREQ-PHASE
+    print('')
+    print('Freq-Phase Stats: ')
+    accuracy = accuracy_score(validation_labels, predictions_freq_phase)
+    recall = recall_score(validation_labels, predictions_freq_phase)
+    f1 = f1_score(validation_labels, predictions_freq_phase)
+    precision = precision_score(validation_labels, predictions_freq_phase)
+    print(f'Accuracy = {accuracy:.3f}, F1-score = {f1:.3f} | Precision = {precision:.3f}, Recall = {recall:.3f}')
+    # PULSE PROFILE
+    print('')
+    print('Pulse Profile Stats: ')
+    accuracy = accuracy_score(validation_labels, predictions_pulse_profile)
+    recall = recall_score(validation_labels, predictions_pulse_profile)
+    f1 = f1_score(validation_labels, predictions_pulse_profile)
+    precision = precision_score(validation_labels, predictions_pulse_profile)
+    print(f'Accuracy = {accuracy:.3f}, F1-score = {f1:.3f} | Precision = {precision:.3f}, Recall = {recall:.3f}')
+    # TIME-PHASE
+    print('')
+    print('Time-Phase Stats: ')
+    accuracy = accuracy_score(validation_labels, predictions_time_phase)
+    recall = recall_score(validation_labels, predictions_time_phase)
+    f1 = f1_score(validation_labels, predictions_time_phase)
+    precision = precision_score(validation_labels, predictions_time_phase)
+    print(f'Accuracy = {accuracy:.3f}, F1-score = {f1:.3f} | Precision = {precision:.3f}, Recall = {recall:.3f}')
+
+# FINAL CLASSIFICATION
+print('')
+print('Final SGAN Classification: ')
+accuracy = accuracy_score(validation_labels, classified_results)
+recall = recall_score(validation_labels, classified_results)
+f1 = f1_score(validation_labels, classified_results)
+precision = precision_score(validation_labels, classified_results)
+tn, fp, fn, tp = confusion_matrix(validation_labels, classified_results).ravel()
+specificity = tn/(tn + fp)
+gmean = math.sqrt(specificity * recall)
+fpr = fp/(tn + fp)
+print(f"Accuracy = {accuracy:.3f}, F1-score = {f1:.3f} | Precision = {precision:.3f}, Recall = {recall:.3f}")
+print(f"False Positive Rate: {fpr:.3f}, Specificity: {specificity:.3f}, G-Mean: {gmean:.3f}")
 
 
 ########## Make Database Objects ##########
 
+# Get the list of all SGAN model names in the AlgorithmSetting table
+sgan_model_names = get_column(f'{base_url}algorithm_settings/?algorithm_parameter=SGAN_files', field='value')
 
+# Ensure that the chosen AlgorithmSetting name is valid
+valid = check_name_validity(model_name)
+while not valid:
+    model_name = input("Enter a name for the retrained models: ")
+    valid = check_name_validity(model_name)
+
+# Copy the working_models/ files to a subdirectory of saved_models/ under the chosen model name
+new_dir_path = f'{path_to_data}saved_models/{model_name}/'
+try:
+    shutil.copytree(path_to_models, new_dir_path)
+    os.rmdir(new_dir_path + 'intermediate_models/')
+except Exception as err:
+    print(err)
+
+# Put the model files in a tar gz file
+with tarfile.open(f'{model_name}.tar.gz', "w:gz") as tar:
+    tar.add(new_dir_path, arcname=os.path.basename(new_dir_path))
+    # Create the AlgorithmSetting object to hold the new model
+    my_data = {'algorithm_parameter': 'SGAN_files', 'value': model_name, 'ml_training_set_collection': collection_name, \
+            'description': f'Accuracy on validation set: {accuracy}'}
+    my_files = {'config_file': tar}
+    my_session.post(f'{base_url}algorithm_settings/', data=my_data, files=my_files)
 
 
 print("All done!")

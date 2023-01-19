@@ -9,13 +9,19 @@
 # 
 ###############################################################################
 
-import argparse, errno, glob, math, os, pickle, sys, time
+import argparse, errno, math, os, pickle, requests, sys
+from glob import glob
 from keras.utils import to_categorical
 from keras.models import load_model
 import numpy as np
 import pandas as pd
 from sklearn.ensemble import StackingClassifier
 from sklearn.metrics import accuracy_score, confusion_matrix, f1_score, precision_score, recall_score
+from time import time
+
+# Constants
+SMART_BASE_URL = os.environ.get('SMART_BASE_URL', 'http://localhost:8000/api/')
+SMART_TOKEN = os.environ.get('SMART_TOKEN', 'fagkjfasbnlvasfdfwjf783YDF')
 
 class NotADirectoryError(Exception):
     pass
@@ -26,24 +32,201 @@ def dir_path(string):
     else:
         raise NotADirectoryError("Directory path is not valid.")
 
-
+# Parse arguments
 parser = argparse.ArgumentParser(description='Calculate performance of the retrained SGAN model against a validation set.')
-parser.add_argument('-d', '--data_directory', help='Absolute path of the data directory (contains the candidates/ and models/ subdirectories)', default='/data/SGAN_Test_Data/')
+parser.add_argument('-d', '--data_directory', help='Absolute path of the data directory (contains the candidates/ and saved_models/ subdirectories)', default='/data/SGAN_Test_Data/')
 parser.add_argument('-n', '--collection_name', help='Name of the MlTrainingSetCollection to get validation sets from', default="")
 parser.add_argument('-m', '--model_name', help='Name of the AlgorithmSettings object that the SGAN model is stored in', default="")
 parser.add_argument('-i', '--individual_stats', help='Also get stats for each model individually (dm_curve, freq_phase, etc.)', default=True)
+parser.add_argument('-l', '--base_url', help='Base URL for the database', default=SMART_BASE_URL)
+parser.add_argument('-t', '--token', help='Authorization token for the database', default=SMART_TOKEN)
 
 args = parser.parse_args()
 path_to_data = args.data_directory
-path_to_models = path_to_data + 'models/'
 collection_name = args.collection_name
 individual_stats = args.individual_stats
 
+# Ensure that the base url ends with a slash
+if base_url[-1] != '/':
+    base_url += '/'
+
+# Ensure that the data path ends with a slash
+if path_to_data[-1] != '/':
+    path_to_data += '/'
+
+# Check that the specified input directories exist
 dir_path(path_to_data + 'candidates/')
+path_to_models = path_to_data + 'saved_models/'
 dir_path(path_to_models)
 
+# Database token
+class TokenAuth(requests.auth.AuthBase):
+    def __init__(self, token):
+        self.token = token
 
-# Get candidates and labels the same way as retrain_sgan but only the validation sets 
+    def __call__(self, r):
+        r.headers['Authorization'] = "Token {}".format(self.token)
+        return r
+
+# Start authorised session
+my_session = requests.session()
+my_session.auth = TokenAuth(token)
+
+
+########## Function Definitions ##########
+
+# Queries a url and returns the result as a pandas dataframe
+def get_dataframe(url=f'{base_url}candidates/', param=None):
+    try:
+        table = my_session.get(url, params=param)
+        table.raise_for_status()
+    except requests.exceptions.HTTPError as err:
+        print(err)
+    return pd.read_json(table.json())
+
+# Queries a url and returns the requested column of the result as a numpy array
+def get_column(url=f'{base_url}candidates/', param=None, field='id'):
+    try:
+        table = my_session.get(url, params=param)
+        table.raise_for_status()
+    except requests.exceptions.HTTPError as err:
+        print(err)
+    try:
+        entries = [row[field] for row in table.json()]
+    except KeyError as err:
+        print(err)
+        print(f"This table has no '{field}' column")
+    return np.array(entries)
+
+# Checks if an SGAN model exists (in the AlgorithmSetting table)
+def check_model_existence(name):
+    if name in sgan_model_names:
+        return True
+    elif name == "":
+        return False
+    else:
+        print(f"The name {name} doesn't match an existing SGAN model")
+        return False
+
+# Checks if a MlTrainingSetCollection exists
+def check_collection_existence(name):
+    if name in set_collections:
+        return True
+    elif name == "":
+        return False
+    else:
+        print(f"The name {name} doesn't match an existing MlTrainingSetCollection")
+        return False
+
+# Checks if the required candidate files have been downloaded/extracted
+def check_file(pfd_name):
+    if not len(glob(path_to_data + pfd_name[:-4] + '*')) == N_FEATURES:
+        print(f"Warning: Missing files for candidate {pfd_name[:-4]}.")
+        return False
+    else:
+        return True
+
+# Executes the candidate file checks in parallel (threads)
+# Returns a mask for the files that exist
+def parallel_file_check(file_list):
+    successes []
+    with cf.ThreadPoolExecutor(NUM_CPUS) as executor:
+        for result in executor.map(check_file, file_list):
+            successes.append(result)
+    total_time = time() - start
+    return successes   
+
+# Checks if the required model files have been downloaded/extracted
+def check_model(name):
+    if len(glob(path_to_models + name)) == 0:
+        print(f"Warning: Missing files for model {name}.")
+        return False
+    else:
+        return True
+
+
+########## Get Filenames and Labels ##########
+
+# Get the list of all MlTrainingSetCollection names
+set_collections = get_column(f'{base_url}ml_training_set_collections/', field='name')
+
+# Ensure that the requested MlTrainingSetCollection exists
+exists = check_collection_existence(collection_name)
+while not exists:
+    collection_name = input("Enter the name of the MlTrainingSetCollection to download: ")
+    exists = check_collection_existence(collection_name)
+
+# Get the list of all SGAN model names in the AlgorithmSetting table
+sgan_model_names = get_column(f'{base_url}algorithm_settings/?algorithm_parameter=SGAN_files', field='value')
+
+# Ensure that the requested SGAN model exists
+exists = check_model_existence(model_name)
+while not exists:
+    model_name = input("Enter the name of the SGAN model to download: ")
+    exists = check_model_existence(model_name)
+
+# Get the MlTrainingSetTypes associated with the MlTrainingSetCollection
+URL = f'{base_url}ml_training_set_types/?collection={collection_name}'
+set_types = get_dataframe(URL)
+
+# Get the filenames for all the Candidates in each MlTrainingSetType
+# Check that all required files have been downloaded/extracted (otherwise exit)
+num_of_sets = 0
+start = time()
+for set_type in set_types:
+    URL = f'{base_url}candidates/?ml_training_sets__types={set_type['id']}'
+    # Check files for validation pulsars
+    if set_type['type'] == "VALIDATION PULSARS":
+        validation_pulsars = get_filenames(URL)
+        file_successes = parallel_file_check(validation_pulsars)
+        num_file_failures = np.count_nonzero(file_successes=False)
+        num_of_sets += 1
+        if num_file_failures != 0:
+            print(f"Warning: Files not found for {num_file_failures} candidates in the VALIDATION PULSARS set.")
+            sys.exit()
+    # Check files for validation noise
+    elif set_type['type'] == "VALIDATION NOISE":
+        validation_noise = get_filenames(URL)
+        file_successes = parallel_file_check(validation_noise)
+        num_file_failures = np.count_nonzero(file_successes=False)
+        num_of_sets += 1
+        if num_file_failures != 0:
+            print(f"Warning: Files not found for {num_file_failures} candidates in the VALIDATION NOISE set.")
+            sys.exit()
+    # Check files for validation RFI
+    elif set_type['type'] == "VALIDATION RFI":
+        validation_RFI = get_filenames(URL)
+        file_successes = parallel_file_check(validation_RFI)
+        num_file_failures = np.count_nonzero(file_successes=False)
+        num_of_sets += 1
+        if num_file_failures != 0:
+            print(f"Warning: Files not found for {num_file_failures} candidates in the VALIDATION RFI set.")
+            sys.exit()
+# Check that the required number of sets were found
+if num_of_sets != 3:
+    print(f"Warning: One or more MlTrainingSets are missing from this MlTrainingSetCollection (expected 7, found {num_of_sets}).")
+    sys.exit()
+# Print the time taken to do the above steps
+total_time = time() - start
+print(f"Time taken to get filenames and check file existence: {total_time}")
+
+# Create the combined validation set
+training_files = path_to_data + training_pulsars.append(training_noise.append(training_RFI))
+validation_files = path_to_data + validation_pulsars.append(validation_noise.append(validation_RFI))
+unlabelled_files = path_to_data + unlabelled_cands
+
+# Create the labels
+validation_labels = np.tile(1, len(validation_pulsars)) + np.tile(0, len(validation_noise)+len(validation_RFI))
+
+
+########## Prepare Training Data ##########
+
+
+
+
+
+
+
 
 
 # Read test set labels file
@@ -108,7 +291,7 @@ predictions_time_phase = np.argmax(predictions_time_phase, axis=1)
 predictions_time_phase = np.reshape(predictions_time_phase, len(predictions_time_phase))
 
 stacked_predictions = np.stack((predictions_freq_phase, predictions_time_phase, predictions_dm_curve, predictions_pulse_profile), axis=1)
-stacked_predictions = np.reshape(stacked_predictions, (len(dm_curve_data),4))
+stacked_predictions = np.reshape(stacked_predictions, (len(dm_curve_data), 4))
 
 classified_results = logistic_model.predict(stacked_predictions)
 

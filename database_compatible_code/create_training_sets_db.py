@@ -25,12 +25,10 @@
 #
 ###############################################################################
 
-import argparse
-import json
+import argparse, os, requests
 from math import floor
 import numpy as np
 import pandas as pd
-import requests
 
 # Constants
 DEFAULT_NUM_PULSARS = 64
@@ -56,6 +54,10 @@ set_collection_name = args.set_collection_name
 base_url = args.base_url
 token = args.token
 
+# Ensure that the base url ends with a slash
+if base_url[-1] != '/':
+    base_url += '/'
+
 # Database token
 class TokenAuth(requests.auth.AuthBase):
     def __init__(self, token):
@@ -72,8 +74,8 @@ my_session.auth = TokenAuth(token)
 
 ########## Function Definitions ##########
 
-# Downloads the requested json file and returns the primary keys as a numpy array
-# Only works if the pk column is called 'id' or 'name'
+# Queries a url and returns the primary keys of the result as a numpy array
+# (Only works if this is a column called 'id' or 'name')
 def get_keys(url=f'{base_url}candidates/', param=None):
     try:
         table = my_session.get(url, params=param)
@@ -187,7 +189,7 @@ while not valid:
     set_collection_name = input("Enter a name for the MlTrainingSetCollection: ")
     valid = check_name_validity(set_collection_name)
 
-''' MlTrainingSets '''
+##### MlTrainingSets #####
 
 # The names of the new MlTrainingSets
 set_type_suffixes = ["_tp", "_tn", "_tr", "_vp", "_vn", "_vr", "_u"]
@@ -212,7 +214,7 @@ my_session.post(URL, json=validation_noise)
 my_session.post(URL, json=validation_RFI)
 my_session.post(URL, json=unlabelled_training)
 
-''' MlTrainingSetTypes '''
+##### MlTrainingSetTypes #####
 
 # Create the MlTrainingSetTypes
 tp_type = {'ml_training_set': set_names[0], 'type': "TRAINING PULSARS"}
@@ -233,7 +235,7 @@ vn_id = my_session.post(URL, json=vn_type).json()['id']
 vr_id = my_session.post(URL, json=vr_type).json()['id']
 u_id = my_session.post(URL, json=u_type).json()['id']
 
-''' MlTrainingSetCollection '''
+##### MlTrainingSetCollection #####
 
 # The list of ids of the MlTrainingSetTypes in this collection
 set_types_list = [tp_id, tn_id, tr_id, vp_id, vn_id, vr_id, u_id]
