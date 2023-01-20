@@ -107,7 +107,7 @@ def get_dataframe(url=f'{base_url}candidates/', param=None):
         table.raise_for_status()
     except requests.exceptions.HTTPError as err:
         print(err)
-    return pd.read_json(table.json())
+    return pd.DataFrame(table.json())
 
 # Queries a url and returns the requested column of the result as a numpy array
 def get_column(url=f'{base_url}candidates/', param=None, field='id'):
@@ -133,7 +133,7 @@ def check_name_validity(name):
     else:
         return True
 
-# Checks if a MlTrainingSetCollection exists
+# Checks if an MlTrainingSetCollection exists
 def check_collection_existence(name):
     if name in set_collections:
         return True
@@ -146,7 +146,7 @@ def check_collection_existence(name):
 # Checks if the required files have been downloaded/extracted
 def check_file(pfd_name):
     if not len(glob(path_to_data + pfd_name[:-4] + '*')) == N_FEATURES:
-        print(f"Warning: Missing files for {pfd_name[:-4]}.")
+        print(f"Warning: Missing files for {pfd_name[:-4]}")
         return False
     else:
         return True
@@ -183,7 +183,7 @@ set_collections = get_column(f'{base_url}ml_training_set_collections/', field='n
 # Ensure that the requested MlTrainingSetCollection exists
 exists = check_collection_existence(collection_name)
 while not exists:
-    collection_name = input("Enter the name of the MlTrainingSetCollection to download: ")
+    collection_name = input("Enter the name of the MlTrainingSetCollection to use: ")
     exists = check_collection_existence(collection_name)
 
 # Get the MlTrainingSetTypes associated with the MlTrainingSetCollection
@@ -191,6 +191,7 @@ URL = f'{base_url}ml_training_set_types/?collection={collection_name}'
 set_types = get_dataframe(URL)
 
 # Get the filenames for all the Candidates in each MlTrainingSetType
+# (Removing 'media/' from the beginning of the name)
 # Check that all required files have been downloaded/extracted (otherwise exit)
 num_of_sets = 0
 start = time()
@@ -199,6 +200,7 @@ for set_type in set_types:
     # Check files for training pulsars
     if set_type['type'] == "TRAINING PULSARS":
         training_pulsars = get_column(URL, field='file')
+        training_pulsars = np.array([x.partition('media/')[2] for x in training_pulsars])
         file_successes = parallel_file_check(training_pulsars)
         num_file_failures = np.count_nonzero(file_successes=False)
         num_of_sets += 1
@@ -208,6 +210,7 @@ for set_type in set_types:
     # Check files for training noise
     elif set_type['type'] == "TRAINING NOISE":
         training_noise = get_column(URL, field='file')
+        training_noise = np.array([x.partition('media/')[2] for x in training_noise])
         file_successes = parallel_file_check(training_noise)
         num_file_failures = np.count_nonzero(file_successes=False)
         num_of_sets += 1
@@ -217,6 +220,7 @@ for set_type in set_types:
     # Check files for training RFI
     elif set_type['type'] == "TRAINING RFI":
         training_RFI = get_column(URL, field='file')
+        training_RFI = np.array([x.partition('media/')[2] for x in training_RFI])
         file_successes = parallel_file_check(training_RFI)
         num_file_failures = np.count_nonzero(file_successes=False)
         num_of_sets += 1
@@ -226,6 +230,7 @@ for set_type in set_types:
     # Check files for validation pulsars
     elif set_type['type'] == "VALIDATION PULSARS":
         validation_pulsars = get_column(URL, field='file')
+        validation_pulsars = np.array([x.partition('media/')[2] for x in validation_pulsars])
         file_successes = parallel_file_check(validation_pulsars)
         num_file_failures = np.count_nonzero(file_successes=False)
         num_of_sets += 1
@@ -235,6 +240,7 @@ for set_type in set_types:
     # Check files for validation noise
     elif set_type['type'] == "VALIDATION NOISE":
         validation_noise = get_column(URL, field='file')
+        validation_noise = np.array([x.partition('media/')[2] for x in validation_noise])
         file_successes = parallel_file_check(validation_noise)
         num_file_failures = np.count_nonzero(file_successes=False)
         num_of_sets += 1
@@ -244,6 +250,7 @@ for set_type in set_types:
     # Check files for validation RFI
     elif set_type['type'] == "VALIDATION RFI":
         validation_RFI = get_column(URL, field='file')
+        validation_RFI = np.array([x.partition('media/')[2] for x in validation_RFI])
         file_successes = parallel_file_check(validation_RFI)
         num_file_failures = np.count_nonzero(file_successes=False)
         num_of_sets += 1
@@ -253,6 +260,7 @@ for set_type in set_types:
     # Check files for unlabelled
     elif set_type['type'] == "UNLABELLED":
         unlabelled_cands = get_column(URL, field='file')
+        unlabelled_cands = np.array([x.partition('media/')[2] for x in unlabelled_cands])
         file_successes = parallel_file_check(unlabelled_cands)
         num_file_failures = np.count_nonzero(file_successes=False)
         num_of_sets += 1
@@ -262,14 +270,15 @@ for set_type in set_types:
 # Check that the required number of sets were found
 if num_of_sets != 7:
     print(f"Warning: One or more MlTrainingSets are missing from this MlTrainingSetCollection (expected 7, found {num_of_sets}).")
+    print(f"Try using download_candidate_data_db.py with -n {collection_name}")
     sys.exit()
 # Print the time taken to do the above steps
 total_time = time() - start
 print(f"Time taken to get filenames and check file existence: {total_time}")
 
 # Create the combined training and validation sets (unlabelled set already done)
-training_files = path_to_data + training_pulsars.append(training_noise.append(training_RFI))
-validation_files = path_to_data + validation_pulsars.append(validation_noise.append(validation_RFI))
+training_files = path_to_data + np.concatenate((training_pulsars, training_noise, training_RFI))
+validation_files = path_to_data + np.concatenate((validation_pulsars, validation_noise, validation_RFI))
 unlabelled_files = path_to_data + unlabelled_cands
 
 # Create the labels for each combined set
@@ -454,7 +463,7 @@ predictions_pulse_profile = pulse_profile_model.predict([pulse_profile_validatio
 predictions_freq_phase = freq_phase_model.predict([freq_phase_validation_data])
 predictions_time_phase = time_phase_model.predict([time_phase_validation_data])
 
-# Process the predictions into numerical scores
+# Process the predictions into numerical scores:
 
 predictions_dm_curve = np.rint(predictions_dm_curve)
 predictions_dm_curve = np.argmax(predictions_dm_curve, axis=1)
@@ -552,15 +561,16 @@ try:
 except Exception as err:
     print(err)
 
-# Put the model files in a tar gz file
+# Put the model files in a .tar.gz file and upload it to the database
 with tarfile.open(f'{model_name}.tar.gz', "w:gz") as tar:
     tar.add(new_dir_path, arcname=os.path.basename(new_dir_path))
     # Create the AlgorithmSetting object to hold the new model
     my_data = {'algorithm_parameter': 'SGAN_files', 'value': model_name, 'ml_training_set_collection': collection_name, \
             'description': f'Accuracy = {accuracy:.3f}, Confusion Matrix: [TP = {tp}, FN = {fn}, FP = {fp}, TN = {tn}]'}
     my_files = {'config_file': tar}
-    # Upload the new model to the database
+    # Upload the new model
     my_session.post(f'{base_url}algorithm_settings/', data=my_data, files=my_files)
 
+my_session.close()
 
 print("All done!")

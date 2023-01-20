@@ -16,7 +16,7 @@ def get_dataframe(session, url, param=None):
         table.raise_for_status()
     except requests.exceptions.HTTPError as err:
         print(err)
-    return pd.read_json(table.json())
+    return pd.DataFrame(table.json())
 
 # Queries a url and returns the requested column of the result as a numpy array
 def get_column(session, url, param=None, field='id'):

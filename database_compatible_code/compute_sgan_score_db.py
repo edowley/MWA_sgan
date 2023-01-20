@@ -78,21 +78,118 @@ my_session = requests.session()
 my_session.auth = TokenAuth(token)
 
 
-# NOTE variables that need to be replaced:
-# path_to_data may be different now
-# output_path should be removed (no csv file anymore)
-# path_to_models is different now
+########## Function Definitions ##########
+
+# Queries a url and returns the result as a pandas dataframe
+def get_dataframe(url=f'{base_url}candidates/', param=None):
+    try:
+        table = my_session.get(url, params=param)
+        table.raise_for_status()
+    except requests.exceptions.HTTPError as err:
+        print(err)
+    return pd.DataFrame(table.json())
+
+# Queries a url and returns the requested column of the result as a numpy array
+def get_column(url=f'{base_url}candidates/', param=None, field='id'):
+    try:
+        table = my_session.get(url, params=param)
+        table.raise_for_status()
+    except requests.exceptions.HTTPError as err:
+        print(err)
+    try:
+        entries = [row[field] for row in table.json()]
+    except KeyError as err:
+        print(err)
+        print(f"This table has no '{field}' column")
+    return np.array(entries)
+
+# Checks if an MlTrainingSet exists
+def check_set_existence(name):
+    if name in training_sets:
+        return True
+    elif name == "":
+        return False
+    else:
+        print(f"The name {name} doesn't match an existing MlTrainingSet")
+        return False
+
+# Checks if an SGAN model exists (in the AlgorithmSetting table)
+def check_model_existence(name):
+    if name in sgan_model_names:
+        return True
+    elif name == "":
+        return False
+    else:
+        print(f"The name {name} doesn't match an existing SGAN model")
+        return False
+
+# Checks if the required files have been downloaded/extracted
+def check_file(pfd_name):
+    if not len(glob(path_to_data + pfd_name[:-4] + '*')) == N_FEATURES:
+        print(f"Warning: Missing files for {pfd_name[:-4]}")
+        return False
+    else:
+        return True
+
+# Executes the file checks in parallel (threads)
+# Returns a mask for the files that exist
+def parallel_file_check(file_list):
+    successes []
+    with cf.ThreadPoolExecutor(NUM_CPUS) as executor:
+        for result in executor.map(check_file, file_list):
+            successes.append(result)
+    total_time = time() - start
+    return successes   
 
 
-########## WIP from here on ##########
+########## Get Filenames and Labels ##########
+
+# Get the list of all SGAN model names in the AlgorithmSetting table
+sgan_model_names = get_column(f'{base_url}algorithm_settings/?algorithm_parameter=SGAN_files', field='value')
+
+# Ensure that the requested SGAN model exists
+exists = check_model_existence(model_name)
+while not exists:
+    model_name = input("Enter the name of the SGAN model to download: ")
+    exists = check_model_existence(model_name)
+
+# Check that the model files have been downloaded/extracted (otherwise exit)
+if not os.isdir(path_to_models + name):
+    print(f"Warning: Missing files for model {name}")
+    sys.exit()
+
+# Get the list of all MlTrainingSet names
+training_sets = get_column(f'{base_url}ml_training_sets/', field='name')
+
+# Ensure that the requested MlTrainingSet exists
+exists = check_set_existence(set_name)
+while not exists:
+    set_name = input("Enter the name of the MlTrainingSet to use: ")
+    exists = check_set_existence(set_name)
+
+# Get the ids and filenames for all Candidates in the MlTrainingSet
+# (Removing 'media/' from the beginning of the name)
+URL = f'{base_url}candidates/?ml_training_sets={set_name}'
+candidates = get_dataframe(URL)
+candidate_ids = candidates['id'].to_numpy()
+candidate_files = candidates['file'].to_numpy()
+candidate_files = np.array([x.partition('media/')[2] for x in candidate_files])
+# Check that all required files have been downloaded/extracted (otherwise exit)
+file_successes = parallel_file_check(candidate_files)
+num_file_failures = np.count_nonzero(file_successes=False)
+num_of_sets += 1
+if num_file_failures != 0:
+    print(f"Warning: Files not found for {num_file_failures} candidates in this set.")
+    print(f"Try using download_candidate_data_db.py with -n {set_name} -s 1")
+    sys.exit()
+
+# Convert the candidate_files into a list of the absolute paths
+candidate_files = path_to_data + candidate_files
 
 
-# Get the candidate file names from validation_labels.csv
-with open(path_to_data + "validation_labels.csv") as f:
-    candidate_files = [path_to_data + row.split(',')[1] for row in f]
-candidate_files = candidate_files[1:] # The first entry is the header 
-basename_candidate_files = [os.path.basename(filename) for filename in candidate_files]
+########## Calculate Scores ##########
 
+# Load the best of the models
 dm_curve_model = load_model(path_to_models + 'dm_curve_best_discriminator_model.h5')
 freq_phase_model = load_model(path_to_models + 'freq_phase_best_discriminator_model.h5')
 pulse_profile_model = load_model(path_to_models + 'pulse_profile_best_discriminator_model.h5')
@@ -100,30 +197,33 @@ time_phase_model = load_model(path_to_models + 'time_phase_best_discriminator_mo
 
 logistic_model = pickle.load(open(path_to_models + 'sgan_retrained.pkl', 'rb'))
 
+# Load data (using [:-4] to remove the '.pfd' file extension from the name)
 dm_curve_combined_array = [np.load(filename[:-4] + '_dm_curve.npy') for filename in candidate_files]
 pulse_profile_combined_array = [np.load(filename[:-4] + '_pulse_profile.npy') for filename in candidate_files]
 freq_phase_combined_array = [np.load(filename[:-4] + '_freq_phase.npy') for filename in candidate_files]
 time_phase_combined_array = [np.load(filename[:-4] + '_time_phase.npy') for filename in candidate_files]
 
+# Reshape the data for the neural nets to read
 reshaped_time_phase = [np.reshape(f,(48,48,1)) for f in time_phase_combined_array]
 reshaped_freq_phase = [np.reshape(f,(48,48,1)) for f in freq_phase_combined_array]
 reshaped_pulse_profile = [np.reshape(f,(64,1)) for f in pulse_profile_combined_array]
 reshaped_dm_curve = [np.reshape(f,(60,1)) for f in dm_curve_combined_array]
 
+# Rescale the data between -1 and +1
 dm_curve_data = np.array([np.interp(a, (a.min(), a.max()), (-1, +1)) for a in reshaped_dm_curve])
 pulse_profile_data = np.array([np.interp(a, (a.min(), a.max()), (-1, +1)) for a in reshaped_pulse_profile])
 freq_phase_data = np.array([np.interp(a, (a.min(), a.max()), (-1, +1)) for a in reshaped_freq_phase])
 time_phase_data = np.array([np.interp(a, (a.min(), a.max()), (-1, +1)) for a in reshaped_time_phase])
 
+print('Data loaded, making predictions...')
+
+# Make predictions
 predictions_freq_phase = freq_phase_model.predict([freq_phase_data])
 predictions_time_phase = time_phase_model.predict([time_phase_data])
 predictions_dm_curve = dm_curve_model.predict([dm_curve_data])
 predictions_pulse_profile = pulse_profile_model.predict([pulse_profile_data])
 
-# print(predictions_freq_phase)
-# print(predictions_time_phase)
-# print(predictions_dm_curve)
-# print(predictions_pulse_profile)
+# Process the predictions into numerical scores:
 
 predictions_time_phase = np.rint(predictions_time_phase)
 predictions_time_phase = np.argmax(predictions_time_phase, axis=1)
@@ -143,13 +243,23 @@ predictions_freq_phase = np.reshape(predictions_freq_phase, len(predictions_freq
 
 stacked_predictions = np.stack((predictions_freq_phase, predictions_time_phase, predictions_dm_curve, predictions_pulse_profile), axis=1)
 stacked_predictions = np.reshape(stacked_predictions, (len(dm_curve_data),4))
-# print(stacked_predictions)
-# classified_results = logistic_model.predict(stacked_predictions) # If you want a classification score
-classified_results = logistic_model.predict_proba(stacked_predictions)[:,1] # If you want a regression score
-# print(logistic_model.predict_proba(stacked_predictions))
-print(classified_results)
 
-with open(output_path+'sgan_ai_score.csv', 'w') as f:
-    f.write('Filename,SGAN_score' + '\n') 
-    for i in range(len(candidate_files)):
-        f.write(basename_candidate_files[i] + ',' + str(classified_results[i]) + '\n')
+'''
+# Un-comment to get the predicted labels (1/0 for pulsar/non-pulsar)
+classified_results = logistic_model.predict(stacked_predictions)
+'''
+# Use by default: estimated likelihood of being a pulsar (between 0 and 1)
+classified_results = logistic_model.predict_proba(stacked_predictions)[:,1]
+
+# Create a list of dictionaries for the new MlScores
+scores_df = pd.DataFrame()
+scores_df['candidate'] = candidate_ids
+scores_df['score'] = classified_results
+scores_json = scores_df.to_dict(orient='records')
+
+# Upload the new MlScores
+my_session.post(f'{base_url}ml_scores/', json=scores_json)
+
+my_session.close()
+
+print('All done!')

@@ -44,7 +44,10 @@ parser.add_argument('-t', '--token', help='Authorization token for the database'
 args = parser.parse_args()
 path_to_data = args.data_directory
 collection_name = args.collection_name
+model_name = args.model_name
 individual_stats = args.individual_stats
+base_url = args.base_url
+token = args.token
 
 # Ensure that the base url ends with a slash
 if base_url[-1] != '/':
@@ -82,7 +85,7 @@ def get_dataframe(url=f'{base_url}candidates/', param=None):
         table.raise_for_status()
     except requests.exceptions.HTTPError as err:
         print(err)
-    return pd.read_json(table.json())
+    return pd.DataFrame(table.json())
 
 # Queries a url and returns the requested column of the result as a numpy array
 def get_column(url=f'{base_url}candidates/', param=None, field='id'):
@@ -121,7 +124,7 @@ def check_collection_existence(name):
 # Checks if the required candidate files have been downloaded/extracted
 def check_file(pfd_name):
     if not len(glob(path_to_data + pfd_name[:-4] + '*')) == N_FEATURES:
-        print(f"Warning: Missing files for candidate {pfd_name[:-4]}.")
+        print(f"Warning: Missing files for candidate {pfd_name[:-4]}")
         return False
     else:
         return True
@@ -135,14 +138,6 @@ def parallel_file_check(file_list):
             successes.append(result)
     total_time = time() - start
     return successes   
-
-# Checks if the required model files have been downloaded/extracted
-def check_model(name):
-    if len(glob(path_to_models + name)) == 0:
-        print(f"Warning: Missing files for model {name}.")
-        return False
-    else:
-        return True
 
 
 ########## Get Filenames and Labels ##########
@@ -165,11 +160,17 @@ while not exists:
     model_name = input("Enter the name of the SGAN model to download: ")
     exists = check_model_existence(model_name)
 
+# Check that the model files have been downloaded/extracted (otherwise exit)
+if not os.isdir(path_to_models + name):
+    print(f"Warning: Missing files for model {name}")
+    sys.exit()
+
 # Get the MlTrainingSetTypes associated with the MlTrainingSetCollection
 URL = f'{base_url}ml_training_set_types/?collection={collection_name}'
 set_types = get_dataframe(URL)
 
 # Get the filenames for all the Candidates in each MlTrainingSetType
+# (Removing 'media/' from the beginning of the name)
 # Check that all required files have been downloaded/extracted (otherwise exit)
 num_of_sets = 0
 start = time()
@@ -178,6 +179,7 @@ for set_type in set_types:
     # Check files for validation pulsars
     if set_type['type'] == "VALIDATION PULSARS":
         validation_pulsars = get_filenames(URL)
+        validation_pulsars = np.array([x.partition('media/')[2] for x in validation_pulsars])
         file_successes = parallel_file_check(validation_pulsars)
         num_file_failures = np.count_nonzero(file_successes=False)
         num_of_sets += 1
@@ -187,6 +189,7 @@ for set_type in set_types:
     # Check files for validation noise
     elif set_type['type'] == "VALIDATION NOISE":
         validation_noise = get_filenames(URL)
+        validation_noise = np.array([x.partition('media/')[2] for x in validation_noise])
         file_successes = parallel_file_check(validation_noise)
         num_file_failures = np.count_nonzero(file_successes=False)
         num_of_sets += 1
@@ -196,6 +199,7 @@ for set_type in set_types:
     # Check files for validation RFI
     elif set_type['type'] == "VALIDATION RFI":
         validation_RFI = get_filenames(URL)
+        validation_RFI = np.array([x.partition('media/')[2] for x in validation_RFI])
         file_successes = parallel_file_check(validation_RFI)
         num_file_failures = np.count_nonzero(file_successes=False)
         num_of_sets += 1
@@ -210,33 +214,13 @@ if num_of_sets != 3:
 total_time = time() - start
 print(f"Time taken to get filenames and check file existence: {total_time}")
 
-# Create the combined validation set
-training_files = path_to_data + training_pulsars.append(training_noise.append(training_RFI))
-validation_files = path_to_data + validation_pulsars.append(validation_noise.append(validation_RFI))
-unlabelled_files = path_to_data + unlabelled_cands
 
-# Create the labels
-validation_labels = np.tile(1, len(validation_pulsars)) + np.tile(0, len(validation_noise)+len(validation_RFI))
+# Create the combined validation set and its labels
+candidate_files = path_to_data + np.concatenate((validation_pulsars, validation_noise, validation_RFI))
+true_labels = np.tile(1, len(validation_pulsars)) + np.tile(0, len(validation_noise)+len(validation_RFI))
 
 
-########## Prepare Training Data ##########
-
-
-
-
-
-
-
-
-
-# Read test set labels file
-test_set = pd.read_csv(label_file_name, header = 0, index_col = 0, \
-                dtype = {'ID': int, 'Pfd path': 'string', 'Classification': int})
-
-candidate_files = path_to_data + test_set['Pfd path'].to_numpy()
-true_labels = test_set['Classification'].to_numpy()
-basename_candidate_files = [os.path.basename(filename) for filename in candidate_files]
-
+########## Rate Model Performance ##########
 
 # Load the best of the models
 dm_curve_model = load_model(path_to_models + 'best_retrained_models/dm_curve_best_discriminator_model.h5')
@@ -272,7 +256,7 @@ predictions_pulse_profile = pulse_profile_model.predict([pulse_profile_data])
 predictions_freq_phase = freq_phase_model.predict([freq_phase_data])
 predictions_time_phase = time_phase_model.predict([time_phase_data])
 
-# Process the predictions into numerical scores
+# Process the predictions into numerical scores:
 
 predictions_dm_curve = np.rint(predictions_dm_curve)
 predictions_dm_curve = np.argmax(predictions_dm_curve, axis=1)
@@ -343,3 +327,5 @@ fpr = fp/(tn + fp)
 print(f"SGAN Model File: {path_to_models}best_retrained_models/sgan_retrained.pkl")
 print(f'Accuracy = {accuracy:.3f}, F1-score = {f1:.3f} | Precision = {precision:.3f}, Recall = {recall:.3f}')
 print(f"False Positive Rate: {fpr:.3f}, Specificity: {specificity:.3f}, G-Mean: {gmean:.3f}")
+
+my_session.close()
