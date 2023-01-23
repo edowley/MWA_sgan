@@ -29,12 +29,13 @@ import argparse, os, requests
 from math import floor
 import numpy as np
 import pandas as pd
+from urllib.parse import urljoin
 
 # Constants
 DEFAULT_NUM_PULSARS = 64
 DEFAULT_NUM_UNLABELLED = 256
 DEFAULT_VALIDATION_RATIO = 0.2
-SMART_BASE_URL = os.environ.get('SMART_BASE_URL', 'http://localhost:8000/api/')
+SMART_BASE_URL = os.environ.get('SMART_BASE_URL', 'http://localhost:8000/')
 SMART_TOKEN = os.environ.get('SMART_TOKEN', 'fagkjfasbnlvasfdfwjf783YDF')
 
 # Parse arguments
@@ -54,10 +55,6 @@ collection_name = args.collection_name
 base_url = args.base_url
 token = args.token
 
-# Ensure that the base url ends with a slash
-if base_url[-1] != '/':
-    base_url += '/'
-
 # Database token
 class TokenAuth(requests.auth.AuthBase):
     def __init__(self, token):
@@ -75,7 +72,7 @@ my_session.auth = TokenAuth(token)
 ########## Function Definitions ##########
 
 # Queries a url and returns the requested column of the result as a numpy array
-def get_column(url=f'{base_url}candidates/', param=None, field='id'):
+def get_column(url=urljoin(base_url, 'api/candidates/'), param=None, field='id'):
     try:
         table = my_session.get(url, params=param)
         table.raise_for_status()
@@ -102,7 +99,7 @@ def check_name_validity(name):
 ########## Candidate Selection ##########
 
 # 'has_file=1' : Candidate 'file' field is not null
-URL = f'{base_url}candidates/?has_file=1'
+URL = urljoin(base_url, 'api/candidates/?has_file=1')
 
 # Get array of ids of Candidates rated as pulsars (avg rating >= 4, no RFI)
 # 'ml_ready_pulsars=1' : no more than one Candidate per Pulsar per Observation
@@ -177,7 +174,7 @@ print(f"Number of unlabelled training candidates selected: {num_unlabelled}")
 ########## Database Object Creation ##########
 
 # Get the list of all MlTrainingSetCollection names
-set_collections = get_column(f'{base_url}ml_training_set_collections/', field='name')
+set_collections = get_column(urljoin(base_url, 'api/ml_training_set_collections/'), field='name')
 
 # Ensure that the chosen MlTrainingSetCollection name is valid
 valid = check_name_validity(collection_name)
@@ -201,7 +198,7 @@ validation_RFI = {'name': set_names[5], 'candidates': [int(x) for x in all_RFI[n
 unlabelled_training = {'name': set_names[6], 'candidates': [int(x) for x in all_unlabelled]}
 
 # Post the MlTrainingSets
-URL = f'{base_url}ml_training_sets/'
+URL = urljoin(base_url, 'api/ml_training_sets/')
 my_session.post(URL, json=training_pulsars)
 my_session.post(URL, json=training_noise)
 my_session.post(URL, json=training_RFI)
@@ -222,7 +219,7 @@ vr_type = {'ml_training_set': set_names[5], 'type': "VALIDATION RFI"}
 u_type = {'ml_training_set': set_names[6], 'type': "UNLABELLED"}
 
 # Post the MlTrainingSetTypes and store their autoincremented ids
-URL = f'{base_url}ml_training_set_types/'
+URL = urljoin(base_url, 'api/ml_training_set_types/')
 tp_id = my_session.post(URL, json=tp_type).json()['id']
 tn_id = my_session.post(URL, json=tn_type).json()['id']
 tr_id = my_session.post(URL, json=tr_type).json()['id']
@@ -238,7 +235,7 @@ set_types_list = [tp_id, tn_id, tr_id, vp_id, vn_id, vr_id, u_id]
 
 # Create and Post the MlTrainingSetCollection
 finished_collection = {'name': collection_name, 'ml_training_set_types': set_types_list}
-my_session.post(f'{base_url}ml_training_set_collections/', json=finished_collection)
+my_session.post(urljoin(base_url, 'api/ml_training_set_collections/'), json=finished_collection)
 
 my_session.close()
 

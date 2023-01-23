@@ -28,11 +28,12 @@ from sklearn.model_selection import train_test_split
 import tarfile
 import tensorflow as tf
 from time import time
+from urllib.parse import urljoin
 
 # Constants
 NUM_CPUS = cpu_count()
 N_FEATURES = 4
-SMART_BASE_URL = os.environ.get('SMART_BASE_URL', 'http://localhost:8000/api/')
+SMART_BASE_URL = os.environ.get('SMART_BASE_URL', 'http://localhost:8000/')
 SMART_TOKEN = os.environ.get('SMART_TOKEN', 'fagkjfasbnlvasfdfwjf783YDF')
 
 class NotADirectoryError(Exception):
@@ -63,12 +64,9 @@ model_name = args.model_name
 batch_size = args.batch_size
 num_epochs = args.num_epochs
 individual_stats = args.individual_stats
+auto_save = args.auto_save
 base_url = args.base_url
 token = args.token
-
-# Ensure that the base url ends with a slash
-if base_url[-1] != '/':
-    base_url += '/'
 
 # Ensure that the data path ends with a slash
 if path_to_data[-1] != '/':
@@ -101,7 +99,7 @@ my_session.auth = TokenAuth(token)
 ########## Function Definitions ##########
 
 # Queries a url and returns the result as a pandas dataframe
-def get_dataframe(url=f'{base_url}candidates/', param=None):
+def get_dataframe(url=urljoin(base_url, 'api/candidates/'), param=None):
     try:
         table = my_session.get(url, params=param)
         table.raise_for_status()
@@ -110,7 +108,7 @@ def get_dataframe(url=f'{base_url}candidates/', param=None):
     return pd.DataFrame(table.json())
 
 # Queries a url and returns the requested column of the result as a numpy array
-def get_column(url=f'{base_url}candidates/', param=None, field='id'):
+def get_column(url=urljoin(base_url, 'api/candidates/'), param=None, field='id'):
     try:
         table = my_session.get(url, params=param)
         table.raise_for_status()
@@ -143,10 +141,11 @@ def check_collection_existence(name):
         print(f"The name {name} doesn't match an existing MlTrainingSetCollection")
         return False
 
-# Checks if the required files have been downloaded/extracted
-def check_file(pfd_name):
-    if not len(glob(path_to_data + pfd_name[:-4] + '*')) == N_FEATURES:
-        print(f"Warning: Missing files for {pfd_name[:-4]}")
+# Checks if the required candidate files have been downloaded/extracted
+def check_file(pfd_url):
+    pfd_path = path_to_data + pfd_url.partition('media/')[2]
+    if not len(glob(pfd_path[:-4] + '*')) == N_FEATURES:
+        print(f"Warning: Missing files for candidate {pfd_path[:-4]}")
         return False
     else:
         return True
@@ -154,7 +153,7 @@ def check_file(pfd_name):
 # Executes the file checks in parallel (threads)
 # Returns a mask for the files that exist
 def parallel_file_check(file_list):
-    successes []
+    successes = []
     with cf.ThreadPoolExecutor(NUM_CPUS) as executor:
         for result in executor.map(check_file, file_list):
             successes.append(result)
@@ -165,8 +164,8 @@ def parallel_file_check(file_list):
 def ask_to_save():
     save = input("Do you wish to save this SGAN model? (y/n) ")
     if save.lower() == "n":
-        save = input("Are you sure? (y/n)")
-        if save.lower() == "y":
+        sure = input("Are you sure? (y/n)")
+        if sure.lower() == "y":
             print(f"This model will be temporarily available in {path_to_models}best_retrained_models/")
             sys.exit()
         else:
@@ -178,7 +177,7 @@ def ask_to_save():
 ########## Get Filenames and Labels ##########
 
 # Get the list of all MlTrainingSetCollection names
-set_collections = get_column(f'{base_url}ml_training_set_collections/', field='name')
+set_collections = get_column(urljoin(base_url, 'api/ml_training_set_collections/'), field='name')
 
 # Ensure that the requested MlTrainingSetCollection exists
 exists = check_collection_existence(collection_name)
@@ -187,82 +186,76 @@ while not exists:
     exists = check_collection_existence(collection_name)
 
 # Get the MlTrainingSetTypes associated with the MlTrainingSetCollection
-URL = f'{base_url}ml_training_set_types/?collection={collection_name}'
+URL = urljoin(base_url, f'api/ml_training_set_types/?collections={collection_name}')
 set_types = get_dataframe(URL)
+set_type_ids = set_types['id'].to_numpy()
+set_type_labels = set_types['type'].to_numpy()
 
 # Get the filenames for all the Candidates in each MlTrainingSetType
-# (Removing 'media/' from the beginning of the name)
 # Check that all required files have been downloaded/extracted (otherwise exit)
 num_of_sets = 0
 start = time()
-for set_type in set_types:
-    URL = f'{base_url}candidates/?ml_training_sets__types={set_type['id']}'
+for index in range(len(set_type_ids)):
+    URL = urljoin(base_url, f"api/candidates/?ml_training_sets__types={set_type_ids[index]}")
     # Check files for training pulsars
-    if set_type['type'] == "TRAINING PULSARS":
+    if set_type_labels[index] == "TRAINING PULSARS":
         training_pulsars = get_column(URL, field='file')
-        training_pulsars = np.array([x.partition('media/')[2] for x in training_pulsars])
         file_successes = parallel_file_check(training_pulsars)
-        num_file_failures = np.count_nonzero(file_successes=False)
+        num_file_failures = np.count_nonzero(file_successes == False)
         num_of_sets += 1
         if num_file_failures != 0:
             print(f"Warning: Files not found for {num_file_failures} candidates in the TRAINING PULSARS set.")
             sys.exit()
     # Check files for training noise
-    elif set_type['type'] == "TRAINING NOISE":
+    elif set_type_labels[index] == "TRAINING NOISE":
         training_noise = get_column(URL, field='file')
-        training_noise = np.array([x.partition('media/')[2] for x in training_noise])
         file_successes = parallel_file_check(training_noise)
-        num_file_failures = np.count_nonzero(file_successes=False)
+        num_file_failures = np.count_nonzero(file_successes == False)
         num_of_sets += 1
         if num_file_failures != 0:
             print(f"Warning: Files not found for {num_file_failures} candidates in the TRAINING NOISE set.")
             sys.exit()
     # Check files for training RFI
-    elif set_type['type'] == "TRAINING RFI":
+    elif set_type_labels[index] == "TRAINING RFI":
         training_RFI = get_column(URL, field='file')
-        training_RFI = np.array([x.partition('media/')[2] for x in training_RFI])
         file_successes = parallel_file_check(training_RFI)
-        num_file_failures = np.count_nonzero(file_successes=False)
+        num_file_failures = np.count_nonzero(file_successes == False)
         num_of_sets += 1
         if num_file_failures != 0:
             print(f"Warning: Files not found for {num_file_failures} candidates in the TRAINING RFI set.")
             sys.exit()
     # Check files for validation pulsars
-    elif set_type['type'] == "VALIDATION PULSARS":
+    elif set_type_labels[index] == "VALIDATION PULSARS":
         validation_pulsars = get_column(URL, field='file')
-        validation_pulsars = np.array([x.partition('media/')[2] for x in validation_pulsars])
         file_successes = parallel_file_check(validation_pulsars)
-        num_file_failures = np.count_nonzero(file_successes=False)
+        num_file_failures = np.count_nonzero(file_successes == False)
         num_of_sets += 1
         if num_file_failures != 0:
             print(f"Warning: Files not found for {num_file_failures} candidates in the VALIDATION PULSARS set.")
             sys.exit()
     # Check files for validation noise
-    elif set_type['type'] == "VALIDATION NOISE":
+    elif set_type_labels[index] == "VALIDATION NOISE":
         validation_noise = get_column(URL, field='file')
-        validation_noise = np.array([x.partition('media/')[2] for x in validation_noise])
         file_successes = parallel_file_check(validation_noise)
-        num_file_failures = np.count_nonzero(file_successes=False)
+        num_file_failures = np.count_nonzero(file_successes == False)
         num_of_sets += 1
         if num_file_failures != 0:
             print(f"Warning: Files not found for {num_file_failures} candidates in the VALIDATION NOISE set.")
             sys.exit()
     # Check files for validation RFI
-    elif set_type['type'] == "VALIDATION RFI":
+    elif set_type_labels[index] == "VALIDATION RFI":
         validation_RFI = get_column(URL, field='file')
-        validation_RFI = np.array([x.partition('media/')[2] for x in validation_RFI])
         file_successes = parallel_file_check(validation_RFI)
-        num_file_failures = np.count_nonzero(file_successes=False)
+        num_file_failures = np.count_nonzero(file_successes == False)
         num_of_sets += 1
         if num_file_failures != 0:
             print(f"Warning: Files not found for {num_file_failures} candidates in the VALIDATION RFI set.")
             sys.exit()
     # Check files for unlabelled
-    elif set_type['type'] == "UNLABELLED":
+    elif set_type_labels[index] == "UNLABELLED":
         unlabelled_cands = get_column(URL, field='file')
-        unlabelled_cands = np.array([x.partition('media/')[2] for x in unlabelled_cands])
         file_successes = parallel_file_check(unlabelled_cands)
-        num_file_failures = np.count_nonzero(file_successes=False)
+        num_file_failures = np.count_nonzero(file_successes == False)
         num_of_sets += 1
         if num_file_failures != 0:
             print(f"Warning: Files not found for {num_file_failures} candidates in the UNLABELLED set.")
@@ -276,14 +269,23 @@ if num_of_sets != 7:
 total_time = time() - start
 print(f"Time taken to get filenames and check file existence: {total_time}")
 
+# Remove the unwanted parts of the pfd urls
+training_pulsars = np.array([path_to_data + x.partition('media/')[2] for x in training_pulsars])
+training_noise = np.array([path_to_data + x.partition('media/')[2] for x in training_noise])
+training_RFI = np.array([path_to_data + x.partition('media/')[2] for x in training_RFI])
+validation_pulsars = np.array([path_to_data + x.partition('media/')[2] for x in validation_pulsars])
+validation_noise = np.array([path_to_data + x.partition('media/')[2] for x in validation_noise])
+validation_RFI = np.array([path_to_data + x.partition('media/')[2] for x in validation_RFI])
+
+unlabelled_files = np.array([path_to_data + x.partition('media/')[2] for x in unlabelled_cands])
+
 # Create the combined training and validation sets (unlabelled set already done)
-training_files = path_to_data + np.concatenate((training_pulsars, training_noise, training_RFI))
-validation_files = path_to_data + np.concatenate((validation_pulsars, validation_noise, validation_RFI))
-unlabelled_files = path_to_data + unlabelled_cands
+training_files = np.concatenate((training_pulsars, training_noise, training_RFI))
+validation_files = np.concatenate((validation_pulsars, validation_noise, validation_RFI))
 
 # Create the labels for each combined set
-training_labels = np.tile(1, len(training_pulsars)) + np.tile(0, len(training_noise)+len(training_RFI))
-validation_labels = np.tile(1, len(validation_pulsars)) + np.tile(0, len(validation_noise)+len(validation_RFI))
+training_labels = np.append(np.tile(1, len(training_pulsars)), np.tile(0, len(training_noise)+len(training_RFI)))
+validation_labels = np.append(np.tile(1, len(validation_pulsars)), np.tile(0, len(validation_noise)+len(validation_RFI)))
 unlabelled_labels = np.tile(-1, len(unlabelled_files))
 
 
@@ -292,10 +294,10 @@ unlabelled_labels = np.tile(-1, len(unlabelled_files))
 ##### Prepare the labelled training data for use by the neural nets #####
 
 # Load data (using [:-4] to remove the '.pfd' file extension from the name)
-dm_curve_combined_array = [np.load(filename[:-4] + '_dm_curve.npy') for filename in training_files]
-pulse_profile_combined_array = [np.load(filename[:-4] + '_pulse_profile.npy') for filename in training_files]
-freq_phase_combined_array = [np.load(filename[:-4] + '_freq_phase.npy') for filename in training_files]
-time_phase_combined_array = [np.load(filename[:-4] + '_time_phase.npy') for filename in training_files]
+dm_curve_combined_array = [np.load(pfd_path[:-4] + '_dm_curve.npy') for pfd_path in training_files]
+pulse_profile_combined_array = [np.load(pfd_path[:-4] + '_pulse_profile.npy') for pfd_path in training_files]
+freq_phase_combined_array = [np.load(pfd_path[:-4] + '_freq_phase.npy') for pfd_path in training_files]
+time_phase_combined_array = [np.load(pfd_path[:-4] + '_time_phase.npy') for pfd_path in training_files]
 
 # Reshape the data for the neural nets to read
 reshaped_dm_curve = [np.reshape(f,(60,1)) for f in dm_curve_combined_array]
@@ -313,10 +315,10 @@ print('Labelled training data loaded')
 
 ##### Repeat for the validation data #####
 
-dm_curve_validation_combined_array = [np.load(filename[:-4] + '_dm_curve.npy') for filename in validation_files]
-pulse_profile_validation_combined_array = [np.load(filename[:-4] + '_pulse_profile.npy') for filename in validation_files]
-freq_phase_validation_combined_array = [np.load(filename[:-4] + '_freq_phase.npy') for filename in validation_files]
-time_phase_validation_combined_array = [np.load(filename[:-4] + '_time_phase.npy') for filename in validation_files]
+dm_curve_validation_combined_array = [np.load(pfd_path[:-4] + '_dm_curve.npy') for pfd_path in validation_files]
+pulse_profile_validation_combined_array = [np.load(pfd_path[:-4] + '_pulse_profile.npy') for pfd_path in validation_files]
+freq_phase_validation_combined_array = [np.load(pfd_path[:-4] + '_freq_phase.npy') for pfd_path in validation_files]
+time_phase_validation_combined_array = [np.load(pfd_path[:-4] + '_time_phase.npy') for pfd_path in validation_files]
 
 reshaped_dm_curve_validation = [np.reshape(f,(60,1)) for f in dm_curve_validation_combined_array]
 reshaped_pulse_profile_validation = [np.reshape(f,(64,1)) for f in pulse_profile_validation_combined_array]
@@ -332,10 +334,10 @@ print('Validation data loaded')
 
 ##### Repeat for the unlabelled training data #####
 
-dm_curve_unlabelled_combined_array = [np.load(filename[:-4] + '_dm_curve.npy') for filename in unlabelled_files]
-pulse_profile_unlabelled_combined_array = [np.load(filename[:-4] + '_pulse_profile.npy') for filename in unlabelled_files]
-freq_phase_unlabelled_combined_array = [np.load(filename[:-4] + '_freq_phase.npy') for filename in unlabelled_files]
-time_phase_unlabelled_combined_array = [np.load(filename[:-4] + '_time_phase.npy') for filename in unlabelled_files]
+dm_curve_unlabelled_combined_array = [np.load(pfd_path[:-4] + '_dm_curve.npy') for pfd_path in unlabelled_files]
+pulse_profile_unlabelled_combined_array = [np.load(pfd_path[:-4] + '_pulse_profile.npy') for pfd_path in unlabelled_files]
+freq_phase_unlabelled_combined_array = [np.load(pfd_path[:-4] + '_freq_phase.npy') for pfd_path in unlabelled_files]
+time_phase_unlabelled_combined_array = [np.load(pfd_path[:-4] + '_time_phase.npy') for pfd_path in unlabelled_files]
 
 reshaped_dm_curve_unlabelled = [np.reshape(f,(60,1)) for f in dm_curve_unlabelled_combined_array]
 reshaped_pulse_profile_unlabelled = [np.reshape(f,(64,1)) for f in pulse_profile_unlabelled_combined_array]
@@ -482,7 +484,7 @@ predictions_time_phase = np.argmax(predictions_time_phase, axis=1)
 predictions_time_phase = np.reshape(predictions_time_phase, len(predictions_time_phase))
 
 stacked_predictions = np.stack((predictions_freq_phase, predictions_time_phase, predictions_dm_curve, predictions_pulse_profile), axis=1)
-stacked_predictions = np.reshape(stacked_predictions, (len(dm_curve_data), 4))
+stacked_predictions = np.reshape(stacked_predictions, (len(predictions_freq_phase), 4))
 
 # Use the logistic regression model
 classified_results = model.predict(stacked_predictions)
@@ -545,7 +547,7 @@ if not auto_save:
     ask_to_save()
 
 # Get the list of all SGAN model names in the AlgorithmSetting table
-sgan_model_names = get_column(f'{base_url}algorithm_settings/?algorithm_parameter=SGAN_files', field='value')
+sgan_model_names = get_column(urljoin(base_url, 'api/algorithm_settings/?algorithm_parameter=SGAN_files'), field='value')
 
 # Ensure that the chosen model name is valid
 valid = check_name_validity(model_name)
@@ -569,7 +571,7 @@ with tarfile.open(f'{model_name}.tar.gz', "w:gz") as tar:
             'description': f'Accuracy = {accuracy:.3f}, Confusion Matrix: [TP = {tp}, FN = {fn}, FP = {fp}, TN = {tn}]'}
     my_files = {'config_file': tar}
     # Upload the new model
-    my_session.post(f'{base_url}algorithm_settings/', data=my_data, files=my_files)
+    my_session.post(urljoin(base_url, 'api/algorithm_settings/'), data=my_data, files=my_files)
 
 my_session.close()
 

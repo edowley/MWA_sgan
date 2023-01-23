@@ -24,10 +24,11 @@ import pandas as pd
 import requests
 from time import time
 from ubc_AI.training import pfddata
+from urllib.parse import urljoin
 from urllib.request import urlretrieve
 
 # Constants
-SMART_BASE_URL = os.environ.get('SMART_BASE_URL', 'http://localhost:8000/api/')
+SMART_BASE_URL = os.environ.get('SMART_BASE_URL', 'http://localhost:8000/')
 SMART_TOKEN = os.environ.get('SMART_TOKEN', 'fagkjfasbnlvasfdfwjf783YDF')
 NUM_CPUS = cpu_count()
 N_FEATURES = 4
@@ -51,10 +52,6 @@ if set_only:
     set_name = name
 else:
     collection_name = name
-
-# Ensure that the base url ends with a slash
-if base_url[-1] != '/':
-    base_url += '/'
 
 # Ensure that the data path ends with a slash
 if path_to_data[-1] != '/':
@@ -80,7 +77,7 @@ my_session.auth = TokenAuth(token)
 ########## Function Definitions ##########
 
 # Queries a url and returns the requested column of the result as a numpy array
-def get_column(url=f'{base_url}candidates/', param=None, field='id'):
+def get_column(url=urljoin(base_url, 'api/candidates/'), param=None, field='id'):
     try:
         table = my_session.get(url, params=param)
         table.raise_for_status()
@@ -115,13 +112,15 @@ def check_set_existence(name):
 
 # Downloads pfd files from the database to the candidates/ directory
 # Returns False and prints a message if the download fails, otherwise returns True
-def download_pfd(pfd_name):
-    if len(glob(path_to_data + pfd_name[:-4] + '*')) == 0:
+def download_pfd(pfd_url):
+    pfd_path = path_to_data + pfd_url.partition('media/')[2]
+    full_url = urljoin(base_url, pfd_url)
+    if len(glob(pfd_path[:-4] + '*')) == 0:
         try:
-            urlretrieve(SMART_BASE_URL + pfd_name, path_to_data + pfd_name.partition('media/')[2])
+            urlretrieve(full_url, pfd_path)
             return True
         except Exception as e:
-            print(f"Download failed: {SMART_BASE_URL + pfd_name}, {e}")
+            print(f"Download failed: {full_url}, {e}")
             return False
     else:
         # If the target pfd file or associated numpy files already exist, skip download
@@ -141,26 +140,27 @@ def parallel_download(download_list):
 
 # Extracts pfd files to numpy array files in the candidates/ directory and deletes the pfd files
 # Returns False and prints a message if the extraction fails, otherwise returns True
-def extract_from_pfd(pfd_name):
-    if not len(glob(path_to_data + pfd_name[:-4] + '*')) == N_FEATURES:
+def extract_from_pfd(pfd_url):
+    pfd_path = path_to_data + pfd_url.partition('media/')[2]
+    if not len(glob(pfd_path[:-4] + '*')) == N_FEATURES:
         try:
-            data_obj = pfddata(path_to_data + pfd_name)
+            data_obj = pfddata(pfd_path)
             time_phase_data = data_obj.getdata(intervals=48)
             freq_phase_data = data_obj.getdata(subbands=48)
             dm_curve_data = data_obj.getdata(DMbins=60)
             profile_data = data_obj.getdata(phasebins=64)
 
-            np.save(path_to_data + pfd_name[:-4] + '_time_phase.npy', time_phase_data)
-            np.save(path_to_data + pfd_name[:-4] + '_freq_phase.npy', freq_phase_data)
-            np.save(path_to_data + pfd_name[:-4] + '_dm_curve.npy', dm_curve_data)
-            np.save(path_to_data + pfd_name[:-4] + '_pulse_profile.npy', profile_data)
+            np.save(pfd_path[:-4] + '_time_phase.npy', time_phase_data)
+            np.save(pfd_path[:-4] + '_freq_phase.npy', freq_phase_data)
+            np.save(pfd_path[:-4] + '_dm_curve.npy', dm_curve_data)
+            np.save(pfd_path[:-4] + '_pulse_profile.npy', profile_data)
 
-            os.unlink(path_to_data + pfd_name)
+            os.unlink(pfd_path)
             return True
         except ValueError: 
-            print(f"Extraction failed: {pfd_name}")
+            print(f"Extraction failed: {pfd_path}")
              # If the extraction fails, delete the pfd anyway
-            os.unlink(path_to_data + pfd_name)
+            os.unlink(pfd_path)
             return False
     else:
         # If the numpy array files already exist, skip extraction
@@ -184,7 +184,7 @@ def parallel_extraction(extraction_list):
 # If downloading only an MlTrainingSet:
 if set_only:
     # Get the list of all MlTrainingSet names
-    training_sets = get_column(f'{base_url}ml_training_sets/', field='name')
+    training_sets = get_column(urljoin(base_url, 'api/ml_training_sets/'), field='name')
 
     # Ensure that the requested MlTrainingSet exists
     exists = check_set_existence(set_name)
@@ -194,23 +194,23 @@ if set_only:
     
     # Download and extract the data for all Candidates in the MlTrainingSet
     print(f"Starting work on {set_name}.")
-    URL = f'{base_url}candidates/?ml_training_sets={set_name}'
+    URL = urljoin(base_url, f'api/candidates/?ml_training_sets={set_name}')
     # Retrieve the file names for the relevant Candidates
-    list_of_pfd_paths = get_column(URL, field='file')
+    list_of_files = get_column(URL, field='file')
     # Download the pfd files and keep track of failed downloads
-    download_successes = parallel_download(list_of_pfd_paths)
+    download_successes = parallel_download(list_of_files)
     # Extract the pfds to numpy arrays, delete the pfds, and track failed extractions
-    extraction_successes = parallel_extraction(list_of_pfd_paths)
+    extraction_successes = parallel_extraction(list_of_files)
     # Count the number of failed downloads/extractions
-    num_failed_downloads = np.count_nonzero(download_successes=False)
-    num_failed_extractions = np.count_nonzero(extraction_successes=False)
+    num_failed_downloads = np.count_nonzero(download_successes == False)
+    num_failed_extractions = np.count_nonzero(extraction_successes == False)
     if (num_failed_downloads != 0) or (num_failed_extractions != 0):
         print(f"Warning: MlTrainingSet {set_name} had {num_failed_downloads} failed downloads and {num_failed_extractions} failed extractions.")
 
 # If downloading an MlTrainingSetCollection:
 else:
     # Get the list of all MlTrainingSetCollection names
-    set_collections = get_column(f'{base_url}ml_training_set_collections/', field='name')
+    set_collections = get_column(urljoin(base_url, 'api/ml_training_set_collections/'), field='name')
 
     # Ensure that the requested MlTrainingSetCollection exists
     exists = check_collection_existence(collection_name)
@@ -219,7 +219,7 @@ else:
         exists = check_collection_existence(collection_name)
 
     # Get the names of the MlTrainingSets associated with the MlTrainingSetCollection
-    URL = f'{base_url}ml_training_sets/?types__collections={collection_name}'
+    URL = urljoin(base_url, f'api/ml_training_sets/?types__collections={collection_name}')
     training_sets = get_column(URL, field='name')
     num_of_sets = len(training_sets)
 
@@ -228,23 +228,23 @@ else:
     # Download and extract the data for all Candidates associated with each MlTrainingSet
     for i in range(num_of_sets):
         print(f"Starting work on set {i+1}/{num_of_sets}, {training_sets[i]}:")
-        URL = f'{base_url}candidates/?ml_training_sets={training_sets[i]}'
+        URL = urljoin(base_url, f'api/candidates/?ml_training_sets={training_sets[i]}')
         # Retrieve the file names for the relevant Candidates
-        list_of_pfd_paths = get_column(URL, field='file')
+        list_of_files = get_column(URL, field='file')
         # Download the pfd files and keep track of failed downloads
-        download_successes = parallel_download(list_of_pfd_paths)
+        download_successes = parallel_download(list_of_files)
         # Extract the pfds to numpy arrays, delete the pfds, and track failed extractions
-        extraction_successes = parallel_extraction(list_of_pfd_paths)
+        extraction_successes = parallel_extraction(list_of_files)
         # Count the number of failed downloads/extractions
-        num_failed_downloads.append(np.count_nonzero(download_successes=False))
-        num_failed_extractions.append(np.count_nonzero(extraction_successes=False))
+        num_failed_downloads.append(np.count_nonzero(download_successes == False))
+        num_failed_extractions.append(np.count_nonzero(extraction_successes == False))
     
     # Print warnings about failed downloads/extractions, if any
     if (np.count_nonzero(num_failed_downloads) != 0) or (np.count_nonzero(num_failed_extractions) != 0):
-        print("Warning: Some failed downloads or extractions were detected.")
+        print("Warning: Some failed downloads or extractions were detected")
         for i in range(num_of_sets):
             if (num_failed_downloads[i] != 0) or (num_failed_extractions[i] != 0):
-                print(f"MlTrainingSet {training_sets[i]} had {num_failed_downloads[i]} failed downloads and {num_failed_extractions[i]} failed extractions.")
+                print(f"MlTrainingSet {training_sets[i]} had {num_failed_downloads[i]} failed downloads and {num_failed_extractions[i]} failed extractions")
 
 my_session.close()
 

@@ -18,9 +18,10 @@ import pandas as pd
 from sklearn.ensemble import StackingClassifier
 from sklearn.metrics import accuracy_score, confusion_matrix, f1_score, precision_score, recall_score
 from time import time
+from urllib.parse import urljoin
 
 # Constants
-SMART_BASE_URL = os.environ.get('SMART_BASE_URL', 'http://localhost:8000/api/')
+SMART_BASE_URL = os.environ.get('SMART_BASE_URL', 'http://localhost:8000/')
 SMART_TOKEN = os.environ.get('SMART_TOKEN', 'fagkjfasbnlvasfdfwjf783YDF')
 
 class NotADirectoryError(Exception):
@@ -49,10 +50,6 @@ individual_stats = args.individual_stats
 base_url = args.base_url
 token = args.token
 
-# Ensure that the base url ends with a slash
-if base_url[-1] != '/':
-    base_url += '/'
-
 # Ensure that the data path ends with a slash
 if path_to_data[-1] != '/':
     path_to_data += '/'
@@ -79,7 +76,7 @@ my_session.auth = TokenAuth(token)
 ########## Function Definitions ##########
 
 # Queries a url and returns the result as a pandas dataframe
-def get_dataframe(url=f'{base_url}candidates/', param=None):
+def get_dataframe(url=urljoin(base_url, 'api/candidates/'), param=None):
     try:
         table = my_session.get(url, params=param)
         table.raise_for_status()
@@ -88,7 +85,7 @@ def get_dataframe(url=f'{base_url}candidates/', param=None):
     return pd.DataFrame(table.json())
 
 # Queries a url and returns the requested column of the result as a numpy array
-def get_column(url=f'{base_url}candidates/', param=None, field='id'):
+def get_column(url=urljoin(base_url, 'api/candidates/'), param=None, field='id'):
     try:
         table = my_session.get(url, params=param)
         table.raise_for_status()
@@ -122,9 +119,10 @@ def check_collection_existence(name):
         return False
 
 # Checks if the required candidate files have been downloaded/extracted
-def check_file(pfd_name):
-    if not len(glob(path_to_data + pfd_name[:-4] + '*')) == N_FEATURES:
-        print(f"Warning: Missing files for candidate {pfd_name[:-4]}")
+def check_file(pfd_url):
+    pfd_path = path_to_data + pfd_url.partition('media/')[2]
+    if not len(glob(pfd_path[:-4] + '*')) == N_FEATURES:
+        print(f"Warning: Missing files for candidate {pfd_path[:-4]}")
         return False
     else:
         return True
@@ -132,7 +130,7 @@ def check_file(pfd_name):
 # Executes the candidate file checks in parallel (threads)
 # Returns a mask for the files that exist
 def parallel_file_check(file_list):
-    successes []
+    successes = []
     with cf.ThreadPoolExecutor(NUM_CPUS) as executor:
         for result in executor.map(check_file, file_list):
             successes.append(result)
@@ -143,7 +141,7 @@ def parallel_file_check(file_list):
 ########## Get Filenames and Labels ##########
 
 # Get the list of all MlTrainingSetCollection names
-set_collections = get_column(f'{base_url}ml_training_set_collections/', field='name')
+set_collections = get_column(urljoin(base_url, 'api/ml_training_set_collections/'), field='name')
 
 # Ensure that the requested MlTrainingSetCollection exists
 exists = check_collection_existence(collection_name)
@@ -152,7 +150,7 @@ while not exists:
     exists = check_collection_existence(collection_name)
 
 # Get the list of all SGAN model names in the AlgorithmSetting table
-sgan_model_names = get_column(f'{base_url}algorithm_settings/?algorithm_parameter=SGAN_files', field='value')
+sgan_model_names = get_column(urljoin(base_url, 'api/algorithm_settings/?algorithm_parameter=SGAN_files'), field='value')
 
 # Ensure that the requested SGAN model exists
 exists = check_model_existence(model_name)
@@ -166,42 +164,40 @@ if not os.isdir(path_to_models + name):
     sys.exit()
 
 # Get the MlTrainingSetTypes associated with the MlTrainingSetCollection
-URL = f'{base_url}ml_training_set_types/?collection={collection_name}'
+URL = urljoin(base_url, f'api/ml_training_set_types/?collections={collection_name}')
 set_types = get_dataframe(URL)
+set_type_ids = set_types['id'].to_numpy()
+set_type_labels = set_types['type'].to_numpy()
 
 # Get the filenames for all the Candidates in each MlTrainingSetType
-# (Removing 'media/' from the beginning of the name)
 # Check that all required files have been downloaded/extracted (otherwise exit)
 num_of_sets = 0
 start = time()
-for set_type in set_types:
-    URL = f'{base_url}candidates/?ml_training_sets__types={set_type['id']}'
+for index in range(len(set_type_ids)):
+    URL = urljoin(base_url, f"api/candidates/?ml_training_sets__types={set_type_ids[index]}")
     # Check files for validation pulsars
-    if set_type['type'] == "VALIDATION PULSARS":
+    if set_type_labels[index] == "VALIDATION PULSARS":
         validation_pulsars = get_filenames(URL)
-        validation_pulsars = np.array([x.partition('media/')[2] for x in validation_pulsars])
         file_successes = parallel_file_check(validation_pulsars)
-        num_file_failures = np.count_nonzero(file_successes=False)
+        num_file_failures = np.count_nonzero(file_successes == False)
         num_of_sets += 1
         if num_file_failures != 0:
             print(f"Warning: Files not found for {num_file_failures} candidates in the VALIDATION PULSARS set.")
             sys.exit()
     # Check files for validation noise
-    elif set_type['type'] == "VALIDATION NOISE":
+    elif set_type_labels[index] == "VALIDATION NOISE":
         validation_noise = get_filenames(URL)
-        validation_noise = np.array([x.partition('media/')[2] for x in validation_noise])
         file_successes = parallel_file_check(validation_noise)
-        num_file_failures = np.count_nonzero(file_successes=False)
+        num_file_failures = np.count_nonzero(file_successes == False)
         num_of_sets += 1
         if num_file_failures != 0:
             print(f"Warning: Files not found for {num_file_failures} candidates in the VALIDATION NOISE set.")
             sys.exit()
     # Check files for validation RFI
-    elif set_type['type'] == "VALIDATION RFI":
+    elif set_type_labels[index] == "VALIDATION RFI":
         validation_RFI = get_filenames(URL)
-        validation_RFI = np.array([x.partition('media/')[2] for x in validation_RFI])
         file_successes = parallel_file_check(validation_RFI)
-        num_file_failures = np.count_nonzero(file_successes=False)
+        num_file_failures = np.count_nonzero(file_successes == False)
         num_of_sets += 1
         if num_file_failures != 0:
             print(f"Warning: Files not found for {num_file_failures} candidates in the VALIDATION RFI set.")
@@ -214,6 +210,10 @@ if num_of_sets != 3:
 total_time = time() - start
 print(f"Time taken to get filenames and check file existence: {total_time}")
 
+# Remove the unwanted parts of the pfd urls
+validation_pulsars = np.array([x.partition('media/')[2] for x in validation_pulsars])
+validation_noise = np.array([x.partition('media/')[2] for x in validation_noise])
+validation_RFI = np.array([x.partition('media/')[2] for x in validation_RFI])
 
 # Create the combined validation set and its labels
 candidate_files = path_to_data + np.concatenate((validation_pulsars, validation_noise, validation_RFI))
@@ -231,10 +231,10 @@ time_phase_model = load_model(path_to_models + 'best_retrained_models/time_phase
 logistic_model = pickle.load(open(path_to_models + 'best_retrained_models/sgan_retrained.pkl', 'rb'))
 
 # Load data (using [:-4] to remove the '.pfd' file extension from the name)
-dm_curve_combined_array = [np.load(filename[:-4] + '_dm_curve.npy') for filename in candidate_files]
-pulse_profile_combined_array = [np.load(filename[:-4] + '_pulse_profile.npy') for filename in candidate_files]
-freq_phase_combined_array = [np.load(filename[:-4] + '_freq_phase.npy') for filename in candidate_files]
-time_phase_combined_array = [np.load(filename[:-4] + '_time_phase.npy') for filename in candidate_files]
+dm_curve_combined_array = [np.load(pfd_path[:-4] + '_dm_curve.npy') for pfd_path in candidate_files]
+pulse_profile_combined_array = [np.load(pfd_path[:-4] + '_pulse_profile.npy') for pfd_path in candidate_files]
+freq_phase_combined_array = [np.load(pfd_path[:-4] + '_freq_phase.npy') for pfd_path in candidate_files]
+time_phase_combined_array = [np.load(pfd_path[:-4] + '_time_phase.npy') for pfd_path in candidate_files]
 
 # Reshape the data for the neural nets to read
 reshaped_dm_curve = [np.reshape(f,(60,1)) for f in dm_curve_combined_array]

@@ -18,11 +18,12 @@ import numpy as np
 from sklearn.ensemble import StackingClassifier
 import tarfile
 from time import time
+from urllib.parse import urljoin
 
 # Constants
 NUM_CPUS = cpu_count()
 N_FEATURES = 4
-SMART_BASE_URL = os.environ.get('SMART_BASE_URL', 'http://localhost:8000/api/')
+SMART_BASE_URL = os.environ.get('SMART_BASE_URL', 'http://localhost:8000/')
 SMART_TOKEN = os.environ.get('SMART_TOKEN', 'fagkjfasbnlvasfdfwjf783YDF')
 
 class NotADirectoryError(Exception):
@@ -51,10 +52,6 @@ batch_size = args.batch_size
 base_url = args.base_url
 token = args.token
 
-# Ensure that the base url ends with a slash
-if base_url[-1] != '/':
-    base_url += '/'
-
 # Ensure that the data path ends with a slash
 if path_to_data[-1] != '/':
     path_to_data += '/'
@@ -81,7 +78,7 @@ my_session.auth = TokenAuth(token)
 ########## Function Definitions ##########
 
 # Queries a url and returns the result as a pandas dataframe
-def get_dataframe(url=f'{base_url}candidates/', param=None):
+def get_dataframe(url=urljoin(base_url, 'api/candidates/'), param=None):
     try:
         table = my_session.get(url, params=param)
         table.raise_for_status()
@@ -90,7 +87,7 @@ def get_dataframe(url=f'{base_url}candidates/', param=None):
     return pd.DataFrame(table.json())
 
 # Queries a url and returns the requested column of the result as a numpy array
-def get_column(url=f'{base_url}candidates/', param=None, field='id'):
+def get_column(url=urljoin(base_url, 'api/candidates/'), param=None, field='id'):
     try:
         table = my_session.get(url, params=param)
         table.raise_for_status()
@@ -123,10 +120,11 @@ def check_model_existence(name):
         print(f"The name {name} doesn't match an existing SGAN model")
         return False
 
-# Checks if the required files have been downloaded/extracted
-def check_file(pfd_name):
-    if not len(glob(path_to_data + pfd_name[:-4] + '*')) == N_FEATURES:
-        print(f"Warning: Missing files for {pfd_name[:-4]}")
+# Checks if the required candidate files have been downloaded/extracted
+def check_file(pfd_url):
+    pfd_path = path_to_data + pfd_url.partition('media/')[2]
+    if not len(glob(pfd_path[:-4] + '*')) == N_FEATURES:
+        print(f"Warning: Missing files for candidate {pfd_path[:-4]}")
         return False
     else:
         return True
@@ -134,7 +132,7 @@ def check_file(pfd_name):
 # Executes the file checks in parallel (threads)
 # Returns a mask for the files that exist
 def parallel_file_check(file_list):
-    successes []
+    successes = []
     with cf.ThreadPoolExecutor(NUM_CPUS) as executor:
         for result in executor.map(check_file, file_list):
             successes.append(result)
@@ -145,7 +143,7 @@ def parallel_file_check(file_list):
 ########## Get Filenames and Labels ##########
 
 # Get the list of all SGAN model names in the AlgorithmSetting table
-sgan_model_names = get_column(f'{base_url}algorithm_settings/?algorithm_parameter=SGAN_files', field='value')
+sgan_model_names = get_column(urljoin(base_url, 'api/algorithm_settings/?algorithm_parameter=SGAN_files'), field='value')
 
 # Ensure that the requested SGAN model exists
 exists = check_model_existence(model_name)
@@ -159,7 +157,7 @@ if not os.isdir(path_to_models + name):
     sys.exit()
 
 # Get the list of all MlTrainingSet names
-training_sets = get_column(f'{base_url}ml_training_sets/', field='name')
+training_sets = get_column(urljoin(base_url, 'api/ml_training_sets/'), field='name')
 
 # Ensure that the requested MlTrainingSet exists
 exists = check_set_existence(set_name)
@@ -167,13 +165,11 @@ while not exists:
     set_name = input("Enter the name of the MlTrainingSet to use: ")
     exists = check_set_existence(set_name)
 
-# Get the ids and filenames for all Candidates in the MlTrainingSet
-# (Removing 'media/' from the beginning of the name)
-URL = f'{base_url}candidates/?ml_training_sets={set_name}'
+# Get the ids and file names for all Candidates in the MlTrainingSet
+URL = urljoin(base_url, f'candidates/?ml_training_sets={set_name}')
 candidates = get_dataframe(URL)
 candidate_ids = candidates['id'].to_numpy()
 candidate_files = candidates['file'].to_numpy()
-candidate_files = np.array([x.partition('media/')[2] for x in candidate_files])
 # Check that all required files have been downloaded/extracted (otherwise exit)
 file_successes = parallel_file_check(candidate_files)
 num_file_failures = np.count_nonzero(file_successes=False)
@@ -183,8 +179,8 @@ if num_file_failures != 0:
     print(f"Try using download_candidate_data_db.py with -n {set_name} -s 1")
     sys.exit()
 
-# Convert the candidate_files into a list of the absolute paths
-candidate_files = path_to_data + candidate_files
+# Convert the list of pfd urls (database) into a list of absolute paths (local)
+candidate_files = path_to_data + np.array([x.partition('media/')[2] for x in candidate_files])
 
 
 ########## Calculate Scores ##########
@@ -198,10 +194,10 @@ time_phase_model = load_model(path_to_models + 'time_phase_best_discriminator_mo
 logistic_model = pickle.load(open(path_to_models + 'sgan_retrained.pkl', 'rb'))
 
 # Load data (using [:-4] to remove the '.pfd' file extension from the name)
-dm_curve_combined_array = [np.load(filename[:-4] + '_dm_curve.npy') for filename in candidate_files]
-pulse_profile_combined_array = [np.load(filename[:-4] + '_pulse_profile.npy') for filename in candidate_files]
-freq_phase_combined_array = [np.load(filename[:-4] + '_freq_phase.npy') for filename in candidate_files]
-time_phase_combined_array = [np.load(filename[:-4] + '_time_phase.npy') for filename in candidate_files]
+dm_curve_combined_array = [np.load(pfd_path[:-4] + '_dm_curve.npy') for pfd_path in candidate_files]
+pulse_profile_combined_array = [np.load(pfd_path[:-4] + '_pulse_profile.npy') for pfd_path in candidate_files]
+freq_phase_combined_array = [np.load(pfd_path[:-4] + '_freq_phase.npy') for pfd_path in candidate_files]
+time_phase_combined_array = [np.load(pfd_path[:-4] + '_time_phase.npy') for pfd_path in candidate_files]
 
 # Reshape the data for the neural nets to read
 reshaped_time_phase = [np.reshape(f,(48,48,1)) for f in time_phase_combined_array]
@@ -258,7 +254,7 @@ scores_df['score'] = classified_results
 scores_json = scores_df.to_dict(orient='records')
 
 # Upload the new MlScores
-my_session.post(f'{base_url}ml_scores/', json=scores_json)
+my_session.post(urljoin(base_url, 'api/ml_scores/'), json=scores_json)
 
 my_session.close()
 
