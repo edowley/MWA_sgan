@@ -152,7 +152,7 @@ while not exists:
     exists = check_model_existence(model_name)
 
 # Check that the model files have been downloaded/extracted (otherwise exit)
-if not os.isdir(path_to_models + name):
+if not os.path.isdir(path_to_models + name):
     print(f"Warning: Missing files for model {name}")
     sys.exit()
 
@@ -180,7 +180,7 @@ if num_file_failures != 0:
     sys.exit()
 
 # Convert the list of pfd urls (database) into a list of absolute paths (local)
-candidate_files = path_to_data + np.array([x.partition('media/')[2] for x in candidate_files])
+candidate_files = np.array([path_to_data + x.partition('media/')[2] for x in candidate_files])
 
 
 ########## Calculate Scores ##########

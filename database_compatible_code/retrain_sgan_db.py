@@ -68,6 +68,16 @@ auto_save = args.auto_save
 base_url = args.base_url
 token = args.token
 
+# Convert to boolean
+if (individual_stats == "False") or (individual_stats == "false") or (individual_stats == "0"):
+    individual_stats = False
+else:
+    individual_stats = True
+if (auto_save == "False") or (auto_save == "false") or (auto_save == "0"):
+    auto_save = False
+else:
+    auto_save = True
+
 # Ensure that the data path ends with a slash
 if path_to_data[-1] != '/':
     path_to_data += '/'
@@ -204,7 +214,7 @@ for index in range(len(set_type_ids)):
         num_file_failures = np.count_nonzero(file_successes == False)
         num_of_sets += 1
         if num_file_failures != 0:
-            print(f"Warning: Files not found for {num_file_failures} candidates in the TRAINING PULSARS set.")
+            print(f"Warning: Files not found for {num_file_failures} candidates in the TRAINING PULSARS set")
             sys.exit()
     # Check files for training noise
     elif set_type_labels[index] == "TRAINING NOISE":
@@ -213,7 +223,7 @@ for index in range(len(set_type_ids)):
         num_file_failures = np.count_nonzero(file_successes == False)
         num_of_sets += 1
         if num_file_failures != 0:
-            print(f"Warning: Files not found for {num_file_failures} candidates in the TRAINING NOISE set.")
+            print(f"Warning: Files not found for {num_file_failures} candidates in the TRAINING NOISE set")
             sys.exit()
     # Check files for training RFI
     elif set_type_labels[index] == "TRAINING RFI":
@@ -222,7 +232,7 @@ for index in range(len(set_type_ids)):
         num_file_failures = np.count_nonzero(file_successes == False)
         num_of_sets += 1
         if num_file_failures != 0:
-            print(f"Warning: Files not found for {num_file_failures} candidates in the TRAINING RFI set.")
+            print(f"Warning: Files not found for {num_file_failures} candidates in the TRAINING RFI set")
             sys.exit()
     # Check files for validation pulsars
     elif set_type_labels[index] == "VALIDATION PULSARS":
@@ -231,7 +241,7 @@ for index in range(len(set_type_ids)):
         num_file_failures = np.count_nonzero(file_successes == False)
         num_of_sets += 1
         if num_file_failures != 0:
-            print(f"Warning: Files not found for {num_file_failures} candidates in the VALIDATION PULSARS set.")
+            print(f"Warning: Files not found for {num_file_failures} candidates in the VALIDATION PULSARS set")
             sys.exit()
     # Check files for validation noise
     elif set_type_labels[index] == "VALIDATION NOISE":
@@ -240,7 +250,7 @@ for index in range(len(set_type_ids)):
         num_file_failures = np.count_nonzero(file_successes == False)
         num_of_sets += 1
         if num_file_failures != 0:
-            print(f"Warning: Files not found for {num_file_failures} candidates in the VALIDATION NOISE set.")
+            print(f"Warning: Files not found for {num_file_failures} candidates in the VALIDATION NOISE set")
             sys.exit()
     # Check files for validation RFI
     elif set_type_labels[index] == "VALIDATION RFI":
@@ -249,7 +259,7 @@ for index in range(len(set_type_ids)):
         num_file_failures = np.count_nonzero(file_successes == False)
         num_of_sets += 1
         if num_file_failures != 0:
-            print(f"Warning: Files not found for {num_file_failures} candidates in the VALIDATION RFI set.")
+            print(f"Warning: Files not found for {num_file_failures} candidates in the VALIDATION RFI set")
             sys.exit()
     # Check files for unlabelled
     elif set_type_labels[index] == "UNLABELLED":
@@ -258,18 +268,18 @@ for index in range(len(set_type_ids)):
         num_file_failures = np.count_nonzero(file_successes == False)
         num_of_sets += 1
         if num_file_failures != 0:
-            print(f"Warning: Files not found for {num_file_failures} candidates in the UNLABELLED set.")
+            print(f"Warning: Files not found for {num_file_failures} candidates in the UNLABELLED set")
             sys.exit()
 # Check that the required number of sets were found
 if num_of_sets != 7:
-    print(f"Warning: One or more MlTrainingSets are missing from this MlTrainingSetCollection (expected 7, found {num_of_sets}).")
+    print(f"Warning: One or more MlTrainingSets are missing from this MlTrainingSetCollection (expected 7, found {num_of_sets})")
     print(f"Try using download_candidate_data_db.py with -n {collection_name}")
     sys.exit()
 # Print the time taken to do the above steps
 total_time = time() - start
 print(f"Time taken to get filenames and check file existence: {total_time}")
 
-# Remove the unwanted parts of the pfd urls
+# Convert the list of pfd urls (database) into a list of absolute paths (local)
 training_pulsars = np.array([path_to_data + x.partition('media/')[2] for x in training_pulsars])
 training_noise = np.array([path_to_data + x.partition('media/')[2] for x in training_noise])
 training_RFI = np.array([path_to_data + x.partition('media/')[2] for x in training_RFI])
@@ -539,6 +549,24 @@ fpr = fp/(tn + fp)
 print(f"Accuracy = {accuracy:.3f}, F1-score = {f1:.3f} | Precision = {precision:.3f}, Recall = {recall:.3f}")
 print(f"False Positive Rate: {fpr:.3f}, Specificity: {specificity:.3f}, G-Mean: {gmean:.3f}")
 
+'''
+########## START TEST ##########
+matching_labels = validation_labels == classified_results
+print("Incorrect labels: ")
+print(classified_results[~matching_labels])
+incorrect_files = validation_files[~matching_labels]
+print("Incorrect files: ")
+for f in incorrect_files:
+    print(f)
+for f in incorrect_files:
+    if f in validation_pulsars:
+        print("pulsar")
+    elif f in validation_noise:
+        print("noise")
+    elif f in validation_RFI:
+        print("RFI")
+########## END TEST ##########
+'''
 
 ########## Make Database Objects ##########
 
@@ -563,15 +591,24 @@ try:
 except Exception as err:
     print(err)
 
+# Ask for a description of the model
+print("Enter a short description of the model (gives the accuracy by default)")
+description = input("Description (optional): ")
+
 # Put the model files in a .tar.gz file and upload it to the database
-with tarfile.open(f'{model_name}.tar.gz', "w:gz") as tar:
-    tar.add(new_dir_path, arcname=os.path.basename(new_dir_path))
+filename = f'{model_name}.tar.gz'
+tar = tarfile.open(filename, "w:gz")
+tar.add(new_dir_path, arcname=os.path.basename(new_dir_path))
+tar.close()
+with open(filename, 'rb') as f:
     # Create the AlgorithmSetting object to hold the new model
     my_data = {'algorithm_parameter': 'SGAN_files', 'value': model_name, 'ml_training_set_collection': collection_name, \
-            'description': f'Accuracy = {accuracy:.3f}, Confusion Matrix: [TP = {tp}, FN = {fn}, FP = {fp}, TN = {tn}]'}
-    my_files = {'config_file': tar}
+            'description': f'Accuracy = {accuracy:.3f}... {description}'}
+    my_files = {'config_file': (filename, f.read())}
     # Upload the new model
     my_session.post(urljoin(base_url, 'api/algorithm_settings/'), data=my_data, files=my_files)
+# Remove the .tar.gz file from the computer once it has been uploaded
+os.unlink(filename)
 
 my_session.close()
 

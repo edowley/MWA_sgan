@@ -10,9 +10,11 @@
 ###############################################################################
 
 import argparse, errno, math, os, pickle, requests, sys
+import concurrent.futures as cf
 from glob import glob
 from keras.utils import to_categorical
 from keras.models import load_model
+from multiprocessing import cpu_count
 import numpy as np
 import pandas as pd
 from sklearn.ensemble import StackingClassifier
@@ -21,6 +23,8 @@ from time import time
 from urllib.parse import urljoin
 
 # Constants
+NUM_CPUS = cpu_count()
+N_FEATURES = 4
 SMART_BASE_URL = os.environ.get('SMART_BASE_URL', 'http://localhost:8000/')
 SMART_TOKEN = os.environ.get('SMART_TOKEN', 'fagkjfasbnlvasfdfwjf783YDF')
 
@@ -49,6 +53,12 @@ model_name = args.model_name
 individual_stats = args.individual_stats
 base_url = args.base_url
 token = args.token
+
+# Convert to boolean
+if (individual_stats == "False") or (individual_stats == "false") or (individual_stats == "0"):
+    individual_stats = False
+else:
+    individual_stats = True
 
 # Ensure that the data path ends with a slash
 if path_to_data[-1] != '/':
@@ -158,9 +168,12 @@ while not exists:
     model_name = input("Enter the name of the SGAN model to download: ")
     exists = check_model_existence(model_name)
 
+# NEW MODEL PATH
+path_to_models = f'{path_to_models}{model_name}/'
+
 # Check that the model files have been downloaded/extracted (otherwise exit)
-if not os.isdir(path_to_models + name):
-    print(f"Warning: Missing files for model {name}")
+if not os.path.isdir(path_to_models):
+    print(f"Warning: Missing files for model {model_name}")
     sys.exit()
 
 # Get the MlTrainingSetTypes associated with the MlTrainingSetCollection
@@ -177,47 +190,47 @@ for index in range(len(set_type_ids)):
     URL = urljoin(base_url, f"api/candidates/?ml_training_sets__types={set_type_ids[index]}")
     # Check files for validation pulsars
     if set_type_labels[index] == "VALIDATION PULSARS":
-        validation_pulsars = get_filenames(URL)
+        validation_pulsars = get_column(URL, field='file')
         file_successes = parallel_file_check(validation_pulsars)
         num_file_failures = np.count_nonzero(file_successes == False)
         num_of_sets += 1
         if num_file_failures != 0:
-            print(f"Warning: Files not found for {num_file_failures} candidates in the VALIDATION PULSARS set.")
+            print(f"Warning: Files not found for {num_file_failures} candidates in the VALIDATION PULSARS set")
             sys.exit()
     # Check files for validation noise
     elif set_type_labels[index] == "VALIDATION NOISE":
-        validation_noise = get_filenames(URL)
+        validation_noise = get_column(URL, field='file')
         file_successes = parallel_file_check(validation_noise)
         num_file_failures = np.count_nonzero(file_successes == False)
         num_of_sets += 1
         if num_file_failures != 0:
-            print(f"Warning: Files not found for {num_file_failures} candidates in the VALIDATION NOISE set.")
+            print(f"Warning: Files not found for {num_file_failures} candidates in the VALIDATION NOISE set")
             sys.exit()
     # Check files for validation RFI
     elif set_type_labels[index] == "VALIDATION RFI":
-        validation_RFI = get_filenames(URL)
+        validation_RFI = get_column(URL, field='file')
         file_successes = parallel_file_check(validation_RFI)
         num_file_failures = np.count_nonzero(file_successes == False)
         num_of_sets += 1
         if num_file_failures != 0:
-            print(f"Warning: Files not found for {num_file_failures} candidates in the VALIDATION RFI set.")
+            print(f"Warning: Files not found for {num_file_failures} candidates in the VALIDATION RFI set")
             sys.exit()
 # Check that the required number of sets were found
 if num_of_sets != 3:
-    print(f"Warning: One or more MlTrainingSets are missing from this MlTrainingSetCollection (expected 7, found {num_of_sets}).")
+    print(f"Warning: One or more of the validation sets are missing from this MlTrainingSetCollection (expected 3, found {num_of_sets})")
     sys.exit()
 # Print the time taken to do the above steps
 total_time = time() - start
 print(f"Time taken to get filenames and check file existence: {total_time}")
 
-# Remove the unwanted parts of the pfd urls
-validation_pulsars = np.array([x.partition('media/')[2] for x in validation_pulsars])
-validation_noise = np.array([x.partition('media/')[2] for x in validation_noise])
-validation_RFI = np.array([x.partition('media/')[2] for x in validation_RFI])
+# Convert the list of pfd urls (database) into a list of absolute paths (local)
+validation_pulsars = np.array([path_to_data + x.partition('media/')[2] for x in validation_pulsars])
+validation_noise = np.array([path_to_data + x.partition('media/')[2] for x in validation_noise])
+validation_RFI = np.array([path_to_data + x.partition('media/')[2] for x in validation_RFI])
 
 # Create the combined validation set and its labels
-candidate_files = path_to_data + np.concatenate((validation_pulsars, validation_noise, validation_RFI))
-true_labels = np.tile(1, len(validation_pulsars)) + np.tile(0, len(validation_noise)+len(validation_RFI))
+candidate_files = np.concatenate((validation_pulsars, validation_noise, validation_RFI))
+true_labels = np.append(np.tile(1, len(validation_pulsars)), np.tile(0, len(validation_noise)+len(validation_RFI)))
 
 
 ########## Rate Model Performance ##########
