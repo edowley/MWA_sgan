@@ -15,6 +15,7 @@ from keras.utils import to_categorical
 from keras.models import load_model
 from multiprocessing import cpu_count
 import numpy as np
+import pandas as pd
 from sklearn.ensemble import StackingClassifier
 import tarfile
 from time import time
@@ -38,7 +39,7 @@ def dir_path(string):
 # Parse arguments
 parser = argparse.ArgumentParser(description='Classify Candidates using an SGAN model.')
 parser.add_argument('-d', '--data_directory', help='Absolute path of the data directory (contains the candidates/ and saved_models/ subdirectories)', default='/data/SGAN_Test_Data/')
-parser.add_argument('-s', '--set_name', help='Name of the MlTrainingSet to classify', default="")
+parser.add_argument('-n', '--set_name', help='Name of the MlTrainingSet to classify', default="")
 parser.add_argument('-m', '--model_name', help='Name of the SGAN model to use', default="")
 parser.add_argument('-b', '--batch_size', help='No. of pfd files that will be read in one batch', default='16', type=int)
 parser.add_argument('-l', '--base_url', help='Base URL for the database', default=SMART_BASE_URL)
@@ -136,7 +137,6 @@ def parallel_file_check(file_list):
     with cf.ThreadPoolExecutor(NUM_CPUS) as executor:
         for result in executor.map(check_file, file_list):
             successes.append(result)
-    total_time = time() - start
     return successes   
 
 
@@ -151,9 +151,12 @@ while not exists:
     model_name = input("Enter the name of the SGAN model to download: ")
     exists = check_model_existence(model_name)
 
+# NEW MODEL PATH
+path_to_models = f'{path_to_models}{model_name}/'
+
 # Check that the model files have been downloaded/extracted (otherwise exit)
-if not os.path.isdir(path_to_models + name):
-    print(f"Warning: Missing files for model {name}")
+if not os.path.isdir(path_to_models):
+    print(f"Warning: Missing files for model {model_name}")
     sys.exit()
 
 # Get the list of all MlTrainingSet names
@@ -166,14 +169,13 @@ while not exists:
     exists = check_set_existence(set_name)
 
 # Get the ids and file names for all Candidates in the MlTrainingSet
-URL = urljoin(base_url, f'candidates/?ml_training_sets={set_name}')
+URL = urljoin(base_url, f'api/candidates/?ml_training_sets={set_name}')
 candidates = get_dataframe(URL)
 candidate_ids = candidates['id'].to_numpy()
 candidate_files = candidates['file'].to_numpy()
 # Check that all required files have been downloaded/extracted (otherwise exit)
 file_successes = parallel_file_check(candidate_files)
-num_file_failures = np.count_nonzero(file_successes=False)
-num_of_sets += 1
+num_file_failures = np.count_nonzero(file_successes == False)
 if num_file_failures != 0:
     print(f"Warning: Files not found for {num_file_failures} candidates in this set.")
     print(f"Try using download_candidate_data_db.py with -n {set_name} -s 1")
@@ -186,12 +188,12 @@ candidate_files = np.array([path_to_data + x.partition('media/')[2] for x in can
 ########## Calculate Scores ##########
 
 # Load the best of the models
-dm_curve_model = load_model(path_to_models + 'dm_curve_best_discriminator_model.h5')
-freq_phase_model = load_model(path_to_models + 'freq_phase_best_discriminator_model.h5')
-pulse_profile_model = load_model(path_to_models + 'pulse_profile_best_discriminator_model.h5')
-time_phase_model = load_model(path_to_models + 'time_phase_best_discriminator_model.h5')
+dm_curve_model = load_model(path_to_models + 'best_retrained_models/dm_curve_best_discriminator_model.h5')
+freq_phase_model = load_model(path_to_models + 'best_retrained_models/freq_phase_best_discriminator_model.h5')
+pulse_profile_model = load_model(path_to_models + 'best_retrained_models/pulse_profile_best_discriminator_model.h5')
+time_phase_model = load_model(path_to_models + 'best_retrained_models/time_phase_best_discriminator_model.h5')
 
-logistic_model = pickle.load(open(path_to_models + 'sgan_retrained.pkl', 'rb'))
+logistic_model = pickle.load(open(path_to_models + 'best_retrained_models/sgan_retrained.pkl', 'rb'))
 
 # Load data (using [:-4] to remove the '.pfd' file extension from the name)
 dm_curve_combined_array = [np.load(pfd_path[:-4] + '_dm_curve.npy') for pfd_path in candidate_files]

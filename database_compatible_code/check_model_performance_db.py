@@ -144,7 +144,6 @@ def parallel_file_check(file_list):
     with cf.ThreadPoolExecutor(NUM_CPUS) as executor:
         for result in executor.map(check_file, file_list):
             successes.append(result)
-    total_time = time() - start
     return successes   
 
 
