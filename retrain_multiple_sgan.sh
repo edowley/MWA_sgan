@@ -1,14 +1,15 @@
 #!/bin/bash
-source ~/env/bin/activate.sh # activating environment
-cd ~/Documents/sgan/ # navigating to directory
+source ~/venv/bin/activate.sh # activating environment
+cd ~/MWA_sgan/ # navigating to directory
 
 n_runs=20 # number of times to retrain
 i=19
 # for ((i=1; i<=${n_runs}; i++)); do
 while [ "$i" -le ${n_runs} ]; do
-    python retrain_sgan.py > output.log
-    python compute_sgan_score.py
-
+    python3 retrain_sgan.py > output.log
+    python3 compute_sgan_score.py
+    
+    mkdir -p MWA_best_retrained_models/
     mv output.log MWA_best_retrained_models/
     mv sgan_ai_score.csv MWA_best_retrained_models/
     cd MWA_best_retrained_models/
@@ -34,7 +35,7 @@ while [ "$i" -le ${n_runs} ]; do
     mv ../training_logs/time_phase.png ${dir}/
 
     # going back to sgan directory
-    cd ~/Documents/sgan/
+    cd ~/MWA_sgan/
 
     i=$(( i + 1 ))
 done
