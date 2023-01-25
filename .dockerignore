@@ -1,5 +1,3 @@
 # Ignore everything but the necessary python scripts
 best_retrained_models/
-MWA_best_retrained_models/
 .git
-*.csv
