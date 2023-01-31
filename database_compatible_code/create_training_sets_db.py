@@ -32,8 +32,8 @@ import pandas as pd
 from urllib.parse import urljoin
 
 # Constants
-DEFAULT_NUM_PULSARS = 64
-DEFAULT_NUM_UNLABELLED = 256
+DEFAULT_NUM_PULSARS = 256
+DEFAULT_NUM_UNLABELLED = 512
 DEFAULT_VALIDATION_RATIO = 0.2
 SMART_BASE_URL = os.environ.get('SMART_BASE_URL', 'http://localhost:8000/')
 SMART_TOKEN = os.environ.get('SMART_TOKEN', 'fagkjfasbnlvasfdfwjf783YDF')
