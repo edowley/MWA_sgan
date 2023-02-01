@@ -42,7 +42,6 @@ parser = argparse.ArgumentParser(description='Calculate performance of the retra
 parser.add_argument('-d', '--data_directory', help='Absolute path of the data directory (contains the candidates/ and saved_models/ subdirectories)', default='/data/SGAN_Test_Data/')
 parser.add_argument('-n', '--collection_name', help='Name of the MlTrainingSetCollection to get validation sets from', default="")
 parser.add_argument('-m', '--model_name', help='Name of the AlgorithmSettings object that the SGAN model is stored in', default="")
-parser.add_argument('-i', '--individual_stats', help='Also get stats for each model individually (dm_curve, freq_phase, etc.)', default=True)
 parser.add_argument('-l', '--base_url', help='Base URL for the database', default=SMART_BASE_URL)
 parser.add_argument('-t', '--token', help='Authorization token for the database', default=SMART_TOKEN)
 
@@ -50,15 +49,8 @@ args = parser.parse_args()
 path_to_data = args.data_directory
 collection_name = args.collection_name
 model_name = args.model_name
-individual_stats = args.individual_stats
 base_url = args.base_url
 token = args.token
-
-# Convert to boolean
-if (individual_stats == "False") or (individual_stats == "false") or (individual_stats == "0"):
-    individual_stats = False
-else:
-    individual_stats = True
 
 # Ensure that the data path ends with a slash
 if path_to_data[-1] != '/':
@@ -291,39 +283,38 @@ stacked_predictions = np.reshape(stacked_predictions, (len(dm_curve_data), 4))
 
 classified_results = logistic_model.predict(stacked_predictions)
 
-if individual_stats:
-    # DM CURVE
-    print('')
-    print('DM Curve Stats: ')
-    accuracy = accuracy_score(true_labels, predictions_dm_curve)
-    recall = recall_score(true_labels, predictions_dm_curve)
-    f1 = f1_score(true_labels, predictions_dm_curve)
-    precision = precision_score(true_labels, predictions_dm_curve)
-    print(f'Accuracy = {accuracy:.3f}, F1-score = {f1:.3f} | Precision = {precision:.3f}, Recall = {recall:.3f}')
-    # FREQ-PHASE
-    print('')
-    print('Freq-Phase Stats: ')
-    accuracy = accuracy_score(true_labels, predictions_freq_phase)
-    recall = recall_score(true_labels, predictions_freq_phase)
-    f1 = f1_score(true_labels, predictions_freq_phase)
-    precision = precision_score(true_labels, predictions_freq_phase)
-    print(f'Accuracy = {accuracy:.3f}, F1-score = {f1:.3f} | Precision = {precision:.3f}, Recall = {recall:.3f}')
-    # PULSE PROFILE
-    print('')
-    print('Pulse Profile Stats: ')
-    accuracy = accuracy_score(true_labels, predictions_pulse_profile)
-    recall = recall_score(true_labels, predictions_pulse_profile)
-    f1 = f1_score(true_labels, predictions_pulse_profile)
-    precision = precision_score(true_labels, predictions_pulse_profile)
-    print(f'Accuracy = {accuracy:.3f}, F1-score = {f1:.3f} | Precision = {precision:.3f}, Recall = {recall:.3f}')
-    # TIME-PHASE
-    print('')
-    print('Time-Phase Stats: ')
-    accuracy = accuracy_score(true_labels, predictions_time_phase)
-    recall = recall_score(true_labels, predictions_time_phase)
-    f1 = f1_score(true_labels, predictions_time_phase)
-    precision = precision_score(true_labels, predictions_time_phase)
-    print(f'Accuracy = {accuracy:.3f}, F1-score = {f1:.3f} | Precision = {precision:.3f}, Recall = {recall:.3f}')
+# DM CURVE
+print('')
+print('DM Curve Stats: ')
+accuracy = accuracy_score(true_labels, predictions_dm_curve)
+recall = recall_score(true_labels, predictions_dm_curve)
+f1 = f1_score(true_labels, predictions_dm_curve)
+precision = precision_score(true_labels, predictions_dm_curve)
+print(f'Accuracy = {accuracy:.3f}, F1-score = {f1:.3f} | Precision = {precision:.3f}, Recall = {recall:.3f}')
+# FREQ-PHASE
+print('')
+print('Freq-Phase Stats: ')
+accuracy = accuracy_score(true_labels, predictions_freq_phase)
+recall = recall_score(true_labels, predictions_freq_phase)
+f1 = f1_score(true_labels, predictions_freq_phase)
+precision = precision_score(true_labels, predictions_freq_phase)
+print(f'Accuracy = {accuracy:.3f}, F1-score = {f1:.3f} | Precision = {precision:.3f}, Recall = {recall:.3f}')
+# PULSE PROFILE
+print('')
+print('Pulse Profile Stats: ')
+accuracy = accuracy_score(true_labels, predictions_pulse_profile)
+recall = recall_score(true_labels, predictions_pulse_profile)
+f1 = f1_score(true_labels, predictions_pulse_profile)
+precision = precision_score(true_labels, predictions_pulse_profile)
+print(f'Accuracy = {accuracy:.3f}, F1-score = {f1:.3f} | Precision = {precision:.3f}, Recall = {recall:.3f}')
+# TIME-PHASE
+print('')
+print('Time-Phase Stats: ')
+accuracy = accuracy_score(true_labels, predictions_time_phase)
+recall = recall_score(true_labels, predictions_time_phase)
+f1 = f1_score(true_labels, predictions_time_phase)
+precision = precision_score(true_labels, predictions_time_phase)
+print(f'Accuracy = {accuracy:.3f}, F1-score = {f1:.3f} | Precision = {precision:.3f}, Recall = {recall:.3f}')
 
 # FINAL CLASSIFICATION
 print('')

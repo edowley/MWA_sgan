@@ -50,9 +50,8 @@ parser = argparse.ArgumentParser(description='Retrain SGAN model using files fro
 parser.add_argument('-d', '--data_directory', help='Absolute path of the data directory (contains the candidates/ and working_models/ subdirectories)', default='/data/SGAN_Test_Data/')
 parser.add_argument('-n', '--collection_name', help='Name of the MlTrainingSetCollection to download', default="")
 parser.add_argument('-m', '--model_name', help='Name to save the retrained model under', default="")
-parser.add_argument('-b', '--batch_size', help='No. of pfd files that will be read in one batch', default='16', type=int)
+parser.add_argument('-b', '--batch_size', help='No. of candidates per batch for training', default='16', type=int)
 parser.add_argument('-e', '--num_epochs', help='No. of epochs to train', default='20', type=int)
-parser.add_argument('-i', '--individual_stats', help='Also print stats for each feature individually (dm_curve, freq_phase, etc.)', default=True)
 parser.add_argument('-a', '--auto_save', help='Always save the new SGAN model (requires a valid --model_name parameter)', default=True)
 parser.add_argument('-l', '--base_url', help='Base URL for the database', default=SMART_BASE_URL)
 parser.add_argument('-t', '--token', help='Authorization token for the database', default=SMART_TOKEN)
@@ -63,16 +62,11 @@ collection_name = args.collection_name
 model_name = args.model_name
 batch_size = args.batch_size
 num_epochs = args.num_epochs
-individual_stats = args.individual_stats
 auto_save = args.auto_save
 base_url = args.base_url
 token = args.token
 
 # Convert to boolean
-if (individual_stats == "False") or (individual_stats == "false") or (individual_stats == "0"):
-    individual_stats = False
-else:
-    individual_stats = True
 if (auto_save == "False") or (auto_save == "false") or (auto_save == "0"):
     auto_save = False
 else:
@@ -500,39 +494,38 @@ classified_results = model.predict(stacked_predictions)
 
 print('Performance against the validation set: ')
 
-if individual_stats:
-    # DM CURVE
-    print('')
-    print('DM Curve Stats: ')
-    accuracy = accuracy_score(validation_labels, predictions_dm_curve)
-    recall = recall_score(validation_labels, predictions_dm_curve)
-    f1 = f1_score(validation_labels, predictions_dm_curve)
-    precision = precision_score(validation_labels, predictions_dm_curve)
-    print(f'Accuracy = {accuracy:.3f}, F1-score = {f1:.3f} | Precision = {precision:.3f}, Recall = {recall:.3f}')
-    # FREQ-PHASE
-    print('')
-    print('Freq-Phase Stats: ')
-    accuracy = accuracy_score(validation_labels, predictions_freq_phase)
-    recall = recall_score(validation_labels, predictions_freq_phase)
-    f1 = f1_score(validation_labels, predictions_freq_phase)
-    precision = precision_score(validation_labels, predictions_freq_phase)
-    print(f'Accuracy = {accuracy:.3f}, F1-score = {f1:.3f} | Precision = {precision:.3f}, Recall = {recall:.3f}')
-    # PULSE PROFILE
-    print('')
-    print('Pulse Profile Stats: ')
-    accuracy = accuracy_score(validation_labels, predictions_pulse_profile)
-    recall = recall_score(validation_labels, predictions_pulse_profile)
-    f1 = f1_score(validation_labels, predictions_pulse_profile)
-    precision = precision_score(validation_labels, predictions_pulse_profile)
-    print(f'Accuracy = {accuracy:.3f}, F1-score = {f1:.3f} | Precision = {precision:.3f}, Recall = {recall:.3f}')
-    # TIME-PHASE
-    print('')
-    print('Time-Phase Stats: ')
-    accuracy = accuracy_score(validation_labels, predictions_time_phase)
-    recall = recall_score(validation_labels, predictions_time_phase)
-    f1 = f1_score(validation_labels, predictions_time_phase)
-    precision = precision_score(validation_labels, predictions_time_phase)
-    print(f'Accuracy = {accuracy:.3f}, F1-score = {f1:.3f} | Precision = {precision:.3f}, Recall = {recall:.3f}')
+# DM CURVE
+print('')
+print('DM Curve Stats: ')
+accuracy = accuracy_score(validation_labels, predictions_dm_curve)
+recall = recall_score(validation_labels, predictions_dm_curve)
+f1 = f1_score(validation_labels, predictions_dm_curve)
+precision = precision_score(validation_labels, predictions_dm_curve)
+print(f'Accuracy = {accuracy:.3f}, F1-score = {f1:.3f} | Precision = {precision:.3f}, Recall = {recall:.3f}')
+# FREQ-PHASE
+print('')
+print('Freq-Phase Stats: ')
+accuracy = accuracy_score(validation_labels, predictions_freq_phase)
+recall = recall_score(validation_labels, predictions_freq_phase)
+f1 = f1_score(validation_labels, predictions_freq_phase)
+precision = precision_score(validation_labels, predictions_freq_phase)
+print(f'Accuracy = {accuracy:.3f}, F1-score = {f1:.3f} | Precision = {precision:.3f}, Recall = {recall:.3f}')
+# PULSE PROFILE
+print('')
+print('Pulse Profile Stats: ')
+accuracy = accuracy_score(validation_labels, predictions_pulse_profile)
+recall = recall_score(validation_labels, predictions_pulse_profile)
+f1 = f1_score(validation_labels, predictions_pulse_profile)
+precision = precision_score(validation_labels, predictions_pulse_profile)
+print(f'Accuracy = {accuracy:.3f}, F1-score = {f1:.3f} | Precision = {precision:.3f}, Recall = {recall:.3f}')
+# TIME-PHASE
+print('')
+print('Time-Phase Stats: ')
+accuracy = accuracy_score(validation_labels, predictions_time_phase)
+recall = recall_score(validation_labels, predictions_time_phase)
+f1 = f1_score(validation_labels, predictions_time_phase)
+precision = precision_score(validation_labels, predictions_time_phase)
+print(f'Accuracy = {accuracy:.3f}, F1-score = {f1:.3f} | Precision = {precision:.3f}, Recall = {recall:.3f}')
 
 # FINAL CLASSIFICATION
 print('')
@@ -550,6 +543,7 @@ print(f"False Positive Rate: {fpr:.3f}, Specificity: {specificity:.3f}, G-Mean: 
 
 '''
 ########## START TEST ##########
+# This test shows which candidates were incorrectly classified
 matching_labels = validation_labels == classified_results
 print("Incorrect labels: ")
 print(classified_results[~matching_labels])

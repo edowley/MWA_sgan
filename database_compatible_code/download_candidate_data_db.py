@@ -48,6 +48,13 @@ set_only = args.set_only
 base_url = args.base_url
 token = args.token
 
+# Convert to boolean
+if (set_only == "True") or (set_only == "true") or (set_only == "1"):
+    set_only = True
+else:
+    set_only = False
+
+# Assign the appropriate variable
 if set_only:
     set_name = name
 else:
